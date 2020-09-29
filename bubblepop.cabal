@@ -28,6 +28,9 @@ executable bubblepop
     Bubble.Carrier
     Bubble.Hatches
     Bubble.Cooperate
+    Bubble.Utils
+    Bubble.Patterns
+    Bubble.PatternsWOReplaceLet
   -- other-extensions:
   build-depends:
     base >=4.12 && <4.13,
