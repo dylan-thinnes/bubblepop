@@ -117,14 +117,14 @@ matchLits :: [LiteralType] -> [Literal] -> Bool
 matchLits ts lits = length ts == length lits && and (zipWith matchLit ts lits)
 
 {------------------------------------------------------------------------------
-                              GLORIOUS EXPRESSIONS
+                              REFINED EXPRESSIONS
              with "hatches", provided by an environment closure at
 ------------------------------------------------------------------------------}
 
 type Expr = Fix ExprF
 type ExprF = Product RawExprF Maybe
 
--- Pattern synonyms for glorious expressions
+-- Pattern synonyms for refined expressions
 pattern LitG hatch lit             = Fix (Pair (LitF lit)             hatch)
 pattern AppG hatch fun args        = Fix (Pair (AppF fun args)        hatch)
 pattern AbsG hatch args body       = Fix (Pair (AbsF args body)       hatch)
@@ -135,12 +135,12 @@ pattern EConsG hatch cons          = Fix (Pair (EConsF cons)          hatch)
 pattern CaseG hatch scrut branches = Fix (Pair (CaseF scrut branches) hatch)
 pattern PrimOpG hatch prim         = Fix (Pair (PrimOpF prim)         hatch)
 
--- Possibly extract the literal in a glorious expression
+-- Possibly extract the literal in a refined expression
 toLit :: Expr -> Maybe Literal
 toLit (Fix (Pair (LitF lit) _)) = Just lit
 toLit _ = Nothing
 
--- Match a glorious expression against a pattern
+-- Match a refined expression against a pattern
 matchPat :: Pattern String -> Expr -> Maybe [(String, Expr)]
 matchPat (PCons (Cons consFormal formals)) (EConsG _ (Cons consReal reals))
     = do
@@ -285,9 +285,9 @@ hansel = para f
                       where RawExprs & Exprs trade places
 ------------------------------------------------------------------------------}
 
--- Glorify a RawExpr into a glorious Expr, by binding environments and attaching escape hatches
-glorify :: RawExpr -> (Env -> Expr)
-glorify = cata f
+-- Refine a RawExpr into a refined Expr, by binding environments and attaching escape hatches
+refine :: RawExpr -> (Env -> Expr)
+refine = cata f
     where
         f :: RawExprF (Env -> Expr) -> (Env -> Expr)
         f expr env = Fix $ memo env $ modifyEnv expr env
@@ -310,8 +310,8 @@ glorify = cata f
         envHatch env expr@(VarF name) = rehatch (get env name) expr -- Supply env-defined variable as a prehatch
         envHatch _ expr = rehatch Nothing expr
 
-reglorify :: Expr -> Expr
-reglorify = cata (\(Pair expr prehatch) -> Fix $ Pair expr (rehatch prehatch expr))
+rerefine :: Expr -> Expr
+rerefine = cata (\(Pair expr prehatch) -> Fix $ Pair expr (rehatch prehatch expr))
 
 -- "Algebra" that determines any new escape hatches, using the "previous"
 -- escape hatch & the current expression
@@ -351,9 +351,9 @@ rehatch _ (CaseF scrutee branches) = -- Escape hatch when a pattern matches the 
               Just replacements -> Just $ foldr replace body replacements
      in f branches
 
--- Condemn a glorious Expr, casting it back into a RawExpr
-condemn :: Expr -> RawExpr
-condemn = cata (\(Pair raw hatch) -> embed raw)
+-- Ruin a refined Expr, casting it back into a RawExpr
+ruin :: Expr -> RawExpr
+ruin = cata (\(Pair raw hatch) -> embed raw)
 
 {------------------------------------------------------------------------------
                              IO & USER INTERACTION
@@ -394,14 +394,14 @@ prettyRaw = unlines . N.toList . cata toLines
 pretty :: Either String Expr -> IO ()
 pretty = \case
     Left e -> putStrLn $ "Error: " ++ e
-    Right e -> putStrLn $ prettyRaw $ condemn e
+    Right e -> putStrLn $ prettyRaw $ ruin e
 
 repl :: String -> Expr -> IO Expr
 repl str expr = do
     putStr "\ESC[2J\ESC[H"
     putStrLn "============================================"
     putStrLn str
-    putStrLn $ prettyRaw $ condemn expr
+    putStrLn $ prettyRaw $ ruin expr
     let options = crumbtrails expr
     if null options then pure expr
         else do
@@ -413,7 +413,7 @@ repl str expr = do
                     let crumb = options !! i
                     case hansel expr crumb of
                       Left err -> repl ("Error: " ++ err) expr
-                      Right newExpr -> repl "Success." $ reglorify newExpr
+                      Right newExpr -> repl "Success." $ rerefine newExpr
     where
         showOption i option = putStr (show i ++ ": ") >> print option
 
@@ -451,13 +451,13 @@ ex_simple =
         (VarR "x")
         (VarR "y")
 
-ex_simple' = glorify ex_simple env
+ex_simple' = refine ex_simple env
 
 ex_fix :: RawExpr
 ex_fix =
     LetR "x" (AppR (VarR "f") [VarR "x"]) (VarR "x")
 
-ex_fix' = glorify ex_fix env
+ex_fix' = refine ex_fix env
 
 ex_lambda :: RawExpr
 ex_lambda =
@@ -465,7 +465,7 @@ ex_lambda =
         (AbsR ["y"] (AppR primPlus [LitR (Int 2), (VarR "y")]))
         (AppR primTimes [AppR (VarR "plusTwo") [VarR "x"], LitR (Int 3)])
 
-ex_lambda' = glorify ex_lambda env
+ex_lambda' = refine ex_lambda env
 
 ex_fac :: RawExpr
 ex_fac =
@@ -486,7 +486,7 @@ ex_fac =
                             ]]])))
         (AppR (VarR "fac") [LitR (Int 3)])
 
-ex_fac' = glorify ex_fac env
+ex_fac' = refine ex_fac env
 
 ex_foldr :: RawExpr
 ex_foldr =
@@ -500,4 +500,4 @@ ex_foldr =
                 ]))
         (AppR (VarR "foldr") [primPlus, LitR (Int 1), EConsR ":" [LitR (Int 2), EConsR ":" [LitR (Int 3), EConsR "[]" []]]])
 
-ex_foldr' = glorify ex_foldr env
+ex_foldr' = refine ex_foldr env
