@@ -24,30 +24,20 @@ import Data.Map (Map, (!?), insert, fromList, delete)
 import Data.Fix (Fix(..))
 import Data.Functor.Foldable hiding (Cons)
 import Text.Show.Deriving
-import Data.Functor.Classes
 import Data.Functor.Product
-import Data.Functor.Compose
 import Control.Monad (join, guard)
-import Control.Monad.Free
 import qualified Data.List.NonEmpty as N
 import Data.List.NonEmpty (NonEmpty(..), (<|))
 import Data.Functor ((<&>))
-import Debug.Trace
-import Control.Applicative ((<|>))
-import GHC.Exts
+import GHC.Exts (IsString(..))
 import Data.Foldable
 import Data.Maybe (mapMaybe)
 
-data PrimOp = PrimOp
-    { primOpName :: String
-    , primOpContract :: [LiteralType]
-    , primOpFunc :: [Literal] -> Literal
-    }
-instance Show PrimOp where
-    show (PrimOp name _ _) = name
+{------------------------------------------------------------------------------
+                                RAW EXPRESSIONS
+                         expressions without behaviour
+------------------------------------------------------------------------------}
 
--- EXPRESSIONS
--- expressions without behaviour
 type RawExpr = Fix RawExprF
 
 data RawExprF a
@@ -62,9 +52,31 @@ data RawExprF a
     | PrimOpF PrimOp
     deriving (Functor, Foldable, Traversable)
 
+-- Pattern synonyms for fixpoint RawExpr
+pattern LitR lit = Fix (LitF lit)
+pattern AppR fun args = Fix (AppF fun args)
+pattern AbsR args body = Fix (AbsF args body)
+pattern VarR name = Fix (VarF name)
+pattern IfR cond true false = Fix (IfF cond true false)
+pattern LetR name bound body = Fix (LetF name bound body)
+pattern EConsR name args = Fix (EConsF (Cons name args))
+pattern CaseR scrut branches = Fix (CaseF scrut branches)
+pattern PrimOpR prim = Fix (PrimOpF prim)
+
+-- Primitive operations
+data PrimOp = PrimOp
+    { primOpName :: String
+    , primOpContract :: [LiteralType]
+    , primOpFunc :: [Literal] -> Literal
+    }
+instance Show PrimOp where
+    show (PrimOp name _ _) = name
+
+-- Constructors
 data Cons a = Cons String [a]
     deriving (Show, Functor, Foldable, Traversable)
 
+-- Patterns to match with
 data Pattern a
     = PCons (Cons (Pattern a))
     | PWildcard
@@ -78,9 +90,13 @@ prettyPat PWildcard = "_"
 prettyPat (PLiteral lit) = prettyLit lit
 prettyPat (PEscape a) = a
 
+patternNames :: Pattern a -> [a]
+patternNames = Data.Foldable.toList
+
 instance IsString (Pattern String) where
     fromString = PEscape
 
+-- Literals
 data Literal = Char Char | Int Int | String String | Bool Bool
     deriving (Eq, Show)
 data LiteralType = TChar | TInt | TString | TBool
@@ -101,19 +117,15 @@ matchLit _       _          = False
 matchLits :: [LiteralType] -> [Literal] -> Bool
 matchLits ts lits = length ts == length lits && and (zipWith matchLit ts lits)
 
-deriveShow1 ''Cons
-deriveShow1 ''RawExprF
+{------------------------------------------------------------------------------
+                              GLORIOUS EXPRESSIONS
+             with "hatches", provided by an environment closure at
+------------------------------------------------------------------------------}
 
-pattern LitR lit = Fix (LitF lit)
-pattern AppR fun args = Fix (AppF fun args)
-pattern AbsR args body = Fix (AbsF args body)
-pattern VarR name = Fix (VarF name)
-pattern IfR cond true false = Fix (IfF cond true false)
-pattern LetR name bound body = Fix (LetF name bound body)
-pattern EConsR name args = Fix (EConsF (Cons name args))
-pattern CaseR scrut branches = Fix (CaseF scrut branches)
-pattern PrimOpR prim = Fix (PrimOpF prim)
+type Expr = Fix ExprF
+type ExprF = Product RawExprF Maybe
 
+-- Pattern synonyms for glorious expressions
 pattern LitG hatch lit             = Fix (Pair (LitF lit)             hatch)
 pattern AppG hatch fun args        = Fix (Pair (AppF fun args)        hatch)
 pattern AbsG hatch args body       = Fix (Pair (AbsF args body)       hatch)
@@ -124,13 +136,12 @@ pattern EConsG hatch cons          = Fix (Pair (EConsF cons)          hatch)
 pattern CaseG hatch scrut branches = Fix (Pair (CaseF scrut branches) hatch)
 pattern PrimOpG hatch prim         = Fix (Pair (PrimOpF prim)         hatch)
 
+-- Possibly extract the literal in a glorious expression
 toLit :: Expr -> Maybe Literal
 toLit (Fix (Pair (LitF lit) _)) = Just lit
 toLit _ = Nothing
 
-patternNames :: Pattern a -> [a]
-patternNames = Data.Foldable.toList
-
+-- Match a glorious expression against a pattern
 matchPat :: Pattern String -> Expr -> Maybe [(String, Expr)]
 matchPat (PCons (Cons consFormal formals)) (EConsG _ (Cons consReal reals))
     = do
@@ -143,6 +154,62 @@ matchPat (PLiteral formal) (LitG _ real) = guard (formal == real) >> pure []
 matchPat (PEscape formal) real = pure $ [(formal, real)]
 matchPat _ _ = Nothing
 
+{------------------------------------------------------------------------------
+                                  ENVIRONMENTS
+------------------------------------------------------------------------------}
+
+newtype Env = Env { unenv :: Map String Expr }
+deriving instance Show Expr => Show Env
+
+get :: Env -> String -> Maybe Expr
+get (Env e) name = e !? name
+
+set :: String -> Expr -> Env -> Env
+set name expr (Env e) = Env $ insert name expr e
+
+remove :: String -> Env -> Env
+remove name (Env e) = Env $ delete name e
+
+addPrimop :: PrimOp -> Env -> Env
+addPrimop op@(PrimOp name _ _) = set name (Fix $ Pair (PrimOpF op) Nothing)
+
+empty :: Env
+empty = Env (M.empty)
+
+-- Simple replace, can't handle name collisions...
+replace :: (String, Expr) -> Expr -> Expr
+replace (name, replacement) = para f
+    where
+        f :: ExprF (Expr, Expr) -> Expr
+        f v =
+            let unchanged = embed $ fst <$> v
+                changed   = embed $ snd <$> v
+            in
+            case v of
+              Pair (VarF varName) Nothing
+                | name == varName -> replacement
+                | otherwise       -> Fix $ Pair (VarF varName) Nothing
+              Pair (LetF letName _ _) _
+                | name == letName -> unchanged
+                | otherwise       -> changed
+              Pair (AbsF names _) _
+                | name `elem` names -> unchanged
+                | otherwise         -> changed
+              Pair (CaseF scrutee branches) hatch
+                -> CaseG (snd <$> hatch) (snd scrutee) 
+                    $ branches <&> \(pat, body)
+                                    -> ( pat
+                                       , if name `elem` patternNames pat
+                                           then fst body
+                                           else snd body
+                                       )
+              _ -> changed
+
+{------------------------------------------------------------------------------
+                                  BREADCRUMBS
+                         for indexing into expressions
+------------------------------------------------------------------------------}
+
 data Crumb
     = AppFunc | AppArg Int
     | AbsBody
@@ -154,6 +221,30 @@ data Crumb
 
 type Crumbtrail = [Crumb]
 
+-- Find all crumbtrails in an expression tree
+crumbtrails :: Expr -> [Crumbtrail]
+crumbtrails = cata f
+    where
+        f :: ExprF [Crumbtrail] -> [Crumbtrail]
+        f (Pair expr hatch) = children expr <> hasHatch hatch
+
+        children :: RawExprF [Crumbtrail] -> [Crumbtrail]
+        children (LitF lit) = []
+        children (PrimOpF op) = []
+        children (VarF name) = []
+        children (AppF fun args) = ((AppFunc :) <$> fun) <> join (zipWith (fmap . (:)) (map AppArg [0..]) args)
+        children (AbsF names body) = (AbsBody :) <$> body
+        children (IfF cond true false) = join $ zipWith (fmap . (:)) [IfCond, IfTrue, IfFalse] [cond, true, false]
+        children (LetF name bound body) = ((LetBound :) <$> bound) -- <> ((LetBody :) <$> body)
+        children (EConsF (Cons _ args)) = join (zipWith (fmap . (:)) (map EConsArg [0..]) args)
+        children (CaseF body branches) = ((CaseBody :) <$> body) <> join (zipWith (fmap . (:)) (map CaseBranch [0..]) (fmap snd branches))
+
+        hasHatch :: Maybe a -> [Crumbtrail]
+        hasHatch Nothing = []
+        hasHatch (Just _) = [[]]
+
+-- Follows a breadcrumb to its end-node, then replaces that node with its
+-- escape hatch
 hansel :: Expr -> (Crumbtrail -> Either String Expr)
 hansel = para f
     where
@@ -191,79 +282,10 @@ hansel = para f
                              else Left $ "Tried to follow a crumb to a nonexistent constructor argument, " ++ show (length args) ++ " " ++ show i
                       _                          -> Left "Incompatible crumb and constructor."
 
--- Expressions with environments, and holes
-type Expr = Fix ExprF
-type ExprF = Product RawExprF Maybe
-
-crumbs :: Expr -> [Crumbtrail]
-crumbs = cata f
-    where
-        f :: ExprF [Crumbtrail] -> [Crumbtrail]
-        f (Pair expr hatch) = g expr <> h hatch
-
-        g :: RawExprF [Crumbtrail] -> [Crumbtrail]
-        g (LitF lit) = []
-        g (PrimOpF op) = []
-        g (VarF name) = []
-        g (AppF fun args) = ((AppFunc :) <$> fun) <> join (zipWith (fmap . (:)) (map AppArg [0..]) args)
-        g (AbsF names body) = (AbsBody :) <$> body
-        g (IfF cond true false) = join $ zipWith (fmap . (:)) [IfCond, IfTrue, IfFalse] [cond, true, false]
-        g (LetF name bound body) = ((LetBound :) <$> bound) -- <> ((LetBody :) <$> body)
-        g (EConsF (Cons _ args)) = join (zipWith (fmap . (:)) (map EConsArg [0..]) args)
-        g (CaseF body branches) = ((CaseBody :) <$> body) <> join (zipWith (fmap . (:)) (map CaseBranch [0..]) (fmap snd branches))
-
-        h :: Maybe a -> [Crumbtrail]
-        h Nothing = []
-        h (Just _) = [[]]
-
--- ENVIRONMENTS
-newtype Env = Env { unenv :: Map String Expr }
-deriving instance Show Expr => Show Env
-
-get :: Env -> String -> Maybe Expr
-get (Env e) name = e !? name
-
-set :: String -> Expr -> Env -> Env
-set name expr (Env e) = Env $ insert name expr e
-
-remove :: String -> Env -> Env
-remove name (Env e) = Env $ delete name e
-
-addPrimop :: PrimOp -> Env -> Env
-addPrimop op@(PrimOp name _ _) = set name (Fix $ Pair (PrimOpF op) Nothing)
-
-empty :: Env
-empty = Env (M.empty)
-
--- Simple replace, can't handle name collisions...
-replace :: (String, Expr) -> Expr -> Expr
-replace (name, replacement) = para f
-    where
-        f :: ExprF (Expr, Expr) -> Expr
-        f v =
-            let unchanged = fst <$> v
-                changed = snd <$> v
-            in
-            case v of
-              Pair (VarF varName) Nothing
-                | name == varName -> replacement
-                | otherwise       -> Fix $ Pair (VarF varName) Nothing
-              Pair (LetF letName _ _) _
-                | name == letName -> embed unchanged
-                | otherwise       -> embed changed
-              Pair (AbsF names _) _
-                | name `elem` names -> embed unchanged
-                | otherwise         -> embed changed
-              Pair (CaseF scrutee branches) hatch
-                -> CaseG (snd <$> hatch) (snd scrutee) 
-                    $ branches <&> \(pat, body)
-                                    -> ( pat
-                                       , if name `elem` patternNames pat
-                                           then fst body
-                                           else snd body
-                                       )
-              _ -> embed changed
-
+{------------------------------------------------------------------------------
+                          GLORIFICATION & CONDEMNATION
+                      where RawExprs & Exprs trade places
+------------------------------------------------------------------------------}
 
 -- Glorify a RawExpr into a glorious Expr, by binding environments and attaching escape hatches
 glorify :: RawExpr -> (Env -> Expr)
@@ -273,100 +295,74 @@ glorify = cata f
         f expr env = Fix $ memo env $ modifyEnv expr env
 
         memo :: Env -> RawExprF Expr -> ExprF Expr
-        memo env x = Pair x (hatch env x)
+        memo env x = Pair x (envHatch env x)
 
         modifyEnv :: RawExprF (Env -> Expr) -> Env -> RawExprF Expr
-        modifyEnv (LetF name expr body) env = LetF name expr' (body env')
+        modifyEnv (LetF name expr body)    env = LetF name expr' (body env')
             where
                 env' = set name expr' env
                 expr' = expr env'
-        modifyEnv (AbsF names body)     env = AbsF names $ body $ foldr remove env names
+        modifyEnv (AbsF names body)        env = AbsF names $ body $ foldr remove env names
         modifyEnv (CaseF scrutee branches) env = CaseF (scrutee env) (map handleBranch branches)
             where
                 handleBranch (pat, branch) = (pat, branch $ foldr remove env (patternNames pat))
-        modifyEnv f                     env = ($ env) <$> f
+        modifyEnv f                        env = ($ env) <$> f
 
-        hatch :: Env -> RawExprF Expr -> Maybe Expr
-        hatch _ (LitF _)    = Nothing -- Literals have no escape hatches
-        hatch _ (PrimOpF _) = Nothing -- PrimOps have no escape hatches
-        hatch _ (EConsF _)  = Nothing -- Constructors have no escape hatches
-        hatch e (VarF name) = get e name -- Variables have escape hatches when defined in the environment
-        hatch _ (IfF cond true false) =
-            case cond of
-              (Fix (Pair (LitF (Bool True)) _))  -> Just true
-              (Fix (Pair (LitF (Bool False)) _)) -> Just false
-              _                                  -> Nothing
-        hatch _ (AppF func args) =
-            case func of
-              (Fix (Pair (AbsF names body) _)) ->
-                  -- Check args & names match, then place recursive `replace` into escape hatch
-                   if length args == length names
-                      then Just $ foldr replace body (zip names args)
-                      else Nothing -- signal error, rather than hide an escape hatch
-              (Fix (Pair (PrimOpF (PrimOp _ contract func)) _)) -> do
-                  -- Check args are all literals & cardinality matches, then run
-                  lits <- traverse toLit args
-                  guard $ matchLits contract lits
-                  let result = func lits
-                  pure (Fix (Pair (LitF result) Nothing))
-              _ -> Nothing
-        hatch _ (AbsF args body) = -- Escape hatch if lambda has no remaining arguments, will become useful when AppF becomes curried/partial-aware
-            if null args then Just body else Nothing
-        hatch _ (LetF name expr body) = -- Escape hatch at any point by substituting in the body - will need further logic when patterns are implemented
-            Just $ replace (name, expr) body
-        hatch _ (CaseF scrutee branches) = -- Escape hatch when a pattern matches the scrutee
-            let f [] = Nothing
-                f ((pat, body):rest) =
-                    case matchPat pat scrutee of
-                      Nothing -> f rest
-                      Just replacements -> Just $ foldr replace body replacements
-             in f branches
+        envHatch :: Env -> RawExprF Expr -> Maybe Expr
+        envHatch env expr@(VarF name) = rehatch (get env name) expr -- Supply env-defined variable as a prehatch
+        envHatch _ expr = rehatch Nothing expr
 
 reglorify :: Expr -> Expr
-reglorify = cata (\(Pair e k) -> Fix $ Pair e (rehatch k e))
-    where
-        rehatch :: Maybe Expr -> RawExprF Expr -> Maybe Expr
-        rehatch e (LitF _)    = Nothing -- Literals have no escape hatches
-        rehatch e (PrimOpF _) = Nothing -- PrimOps have no escape hatches
-        rehatch e (EConsF _)  = Nothing -- Constructors have no escape hatches
-        rehatch e (VarF name) = e -- Variables have escape hatches when defined in the environment, not when rehatching
-        rehatch e (IfF cond true false) =
-            case cond of
-              (Fix (Pair (LitF (Bool True)) _))  -> Just true
-              (Fix (Pair (LitF (Bool False)) _)) -> Just false
-              _                                  -> Nothing
-        rehatch e (AppF func args) =
-            case func of
-              (Fix (Pair (AbsF names body) _)) ->
-                  -- Check args & names match, then place recursive `replace` into escape hatch
-                   if length args == length names
-                      then Just $ foldr replace body (zip names args)
-                      else Nothing -- signal error, rather than hide an escape hatch
-              (Fix (Pair (PrimOpF (PrimOp _ contract func)) _)) -> do
-                  -- Check args are all literals & cardinality matches, then run
-                  lits <- traverse toLit args
-                  guard $ matchLits contract lits
-                  let result = func lits
-                  pure (Fix (Pair (LitF result) Nothing))
-              _ -> Nothing
-        rehatch e (AbsF args body) = -- Escape hatch if lambda has no remaining arguments, will become useful when AppF becomes curried/partial-aware
-            if null args then Just body else Nothing
-        rehatch e (LetF name expr body) = -- Escape hatch at any point by substituting in the body - will need further logic when patterns are implemented
-            Just $ replace (name, expr) body
-        rehatch e (CaseF scrutee branches) = -- Escape hatch when a pattern matches the scrutee
-            let f [] = Nothing
-                f ((pat, body):rest) =
-                    case matchPat pat scrutee of
-                      Nothing -> f rest
-                      Just replacements -> Just $ foldr replace body replacements
-             in f branches
+reglorify = cata (\(Pair expr prehatch) -> Fix $ Pair expr (rehatch prehatch expr))
+
+-- "Algebra" that determines any new escape hatches, using the "previous"
+-- escape hatch & the current expression
+rehatch :: Maybe Expr -> RawExprF Expr -> Maybe Expr
+rehatch prehatch (VarF name) = prehatch -- Variables have escape hatches when predefined in the environment
+rehatch _ (LitF _)    = Nothing -- Literals have no escape hatches
+rehatch _ (PrimOpF _) = Nothing -- PrimOps have no escape hatches
+rehatch _ (EConsF _)  = Nothing -- Constructors have no escape hatches
+rehatch _ (IfF cond true false) =
+    case cond of
+      (Fix (Pair (LitF (Bool True)) _))  -> Just true
+      (Fix (Pair (LitF (Bool False)) _)) -> Just false
+      _                                  -> Nothing
+rehatch _ (AppF func args) =
+    case func of
+      (Fix (Pair (AbsF names body) _)) ->
+          -- Check args & names match, then place recursive `replace` into escape hatch
+           if length args == length names
+              then Just $ foldr replace body (zip names args)
+              else Nothing -- signal error, rather than hide an escape hatch
+      (Fix (Pair (PrimOpF (PrimOp _ contract func)) _)) -> do
+          -- Check args are all literals & cardinality matches, then run
+          lits <- traverse toLit args
+          guard $ matchLits contract lits
+          let result = func lits
+          pure (Fix (Pair (LitF result) Nothing))
+      _ -> Nothing
+rehatch _ (AbsF args body) = -- Escape hatch if lambda has no remaining arguments, will become useful when AppF becomes curried/partial-aware
+    if null args then Just body else Nothing
+rehatch _ (LetF name expr body) = -- Escape hatch at any point by substituting in the body - will need further logic when patterns are implemented
+    Just $ replace (name, expr) body
+rehatch _ (CaseF scrutee branches) = -- Escape hatch when a pattern matches the scrutee
+    let f [] = Nothing
+        f ((pat, body):rest) =
+            case matchPat pat scrutee of
+              Nothing -> f rest
+              Just replacements -> Just $ foldr replace body replacements
+     in f branches
 
 -- Condemn a glorious Expr, casting it back into a RawExpr
 condemn :: Expr -> RawExpr
 condemn = cata (\(Pair raw hatch) -> embed raw)
 
+{------------------------------------------------------------------------------
+                             IO & USER INTERACTION
+------------------------------------------------------------------------------}
+
 prettyRaw :: RawExpr -> String
-prettyRaw = unlines . N.toList . cata f
+prettyRaw = unlines . N.toList . cata toLines
     where
         line :: a -> NonEmpty a
         line = (:| [])
@@ -384,18 +380,18 @@ prettyRaw = unlines . N.toList . cata f
         parenthesize (line :| []) = ("(" ++ line ++ ")") :| []
         parenthesize (line :| xs) = ("(" ++ line) :| (init xs ++ [last xs ++ ")"])
 
-        f :: RawExprF (NonEmpty String) -> NonEmpty String
-        f (LitF lit) = line $ prettyLit lit
-        f (AppF body args) = body <> indent (nec args)
-        f (AbsF args body) = parenthesize $ ("\\" ++ unwords args ++ " ->") <| indent body
-        f (VarF name) = line name
-        f (IfF cond true false) = line "if" <> indent cond <> line "then" <> indent true <> line "else" <> indent false
-        f (PrimOpF op) = line $ show op
-        f (LetF name bound body) = line ("let " ++ name ++ " =") <> indent bound <> line "in" <> indent body
-        f (EConsF (Cons name args)) = parenthesize $ nec' name (indent <$> args)
-        f (CaseF scrutee branches) = line "case" <> indent (parenthesize scrutee <> nec' "of" (f <$> branches))
+        toLines :: RawExprF (NonEmpty String) -> NonEmpty String
+        toLines (LitF lit) = line $ prettyLit lit
+        toLines (AppF body args) = body <> indent (nec args)
+        toLines (AbsF args body) = parenthesize $ ("\\" ++ unwords args ++ " ->") <| indent body
+        toLines (VarF name) = line name
+        toLines (IfF cond true false) = line "if" <> indent cond <> line "then" <> indent true <> line "else" <> indent false
+        toLines (PrimOpF op) = line $ show op
+        toLines (LetF name bound body) = line ("let " ++ name ++ " =") <> indent bound <> line "in" <> indent body
+        toLines (EConsF (Cons name args)) = parenthesize $ nec' name (indent <$> args)
+        toLines (CaseF scrutee branches) = line "case" <> indent (parenthesize scrutee <> nec' "of" (handleBranch <$> branches))
             where
-                f (pat, body) = line (prettyPat pat) <> indent (line "->" <> body)
+                handleBranch (pat, body) = line (prettyPat pat) <> indent (line "->" <> body)
 
 pretty :: Either String Expr -> IO ()
 pretty = \case
@@ -408,7 +404,7 @@ repl str expr = do
     putStrLn "============================================"
     putStrLn str
     putStrLn $ prettyRaw $ condemn expr
-    let options = crumbs expr
+    let options = crumbtrails expr
     if null options then pure expr
         else do
             mapM_ (uncurry showOption) (zip [0..] options)
@@ -422,6 +418,10 @@ repl str expr = do
                       Right newExpr -> repl "Success." $ reglorify newExpr
     where
         showOption i option = putStr (show i ++ ": ") >> print option
+
+-- Derive show instances, needed for environments
+deriveShow1 ''Cons
+deriveShow1 ''RawExprF
 
 -- Example
 env :: Env
