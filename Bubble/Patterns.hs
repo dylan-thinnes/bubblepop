@@ -158,7 +158,6 @@ matchPat _ _ = Nothing
 ------------------------------------------------------------------------------}
 
 newtype Env = Env { unenv :: Map String Expr }
-deriving instance Show Expr => Show Env
 
 get :: Env -> String -> Maybe Expr
 get (Env e) name = e !? name
@@ -409,7 +408,7 @@ repl str expr = do
             mapM_ (uncurry showOption) (zip [0..] options)
             i <- readLn
             if | i < 0 -> pure expr
-               | i > length options -> repl "Error: Option index out of bounds." expr
+               | i >= length options -> repl "Error: Option index out of bounds." expr
                | otherwise -> do
                     let crumb = options !! i
                     case hansel expr crumb of
@@ -421,6 +420,7 @@ repl str expr = do
 -- Derive show instances, needed for environments
 deriveShow1 ''Cons
 deriveShow1 ''RawExprF
+deriving instance Show Expr => Show Env
 
 -- Example
 env :: Env
