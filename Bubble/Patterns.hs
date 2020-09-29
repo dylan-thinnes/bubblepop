@@ -23,15 +23,14 @@ import qualified Data.Map as M
 import Data.Map (Map, (!?), insert, fromList, delete)
 import Data.Fix (Fix(..))
 import Data.Functor.Foldable hiding (Cons)
-import Text.Show.Deriving
-import Data.Functor.Product
+import Text.Show.Deriving (deriveShow1)
+import Data.Functor.Product (Product(..))
 import Control.Monad (join, guard)
 import qualified Data.List.NonEmpty as N
 import Data.List.NonEmpty (NonEmpty(..), (<|))
 import Data.Functor ((<&>))
 import GHC.Exts (IsString(..))
-import Data.Foldable
-import Data.Maybe (mapMaybe)
+import qualified Data.Foldable
 
 {------------------------------------------------------------------------------
                                 RAW EXPRESSIONS
