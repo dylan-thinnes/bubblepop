@@ -192,15 +192,25 @@ empty = Env (M.empty)
 
 -- Simple replace, can't handle name collisions...
 replace :: (String, Expr) -> Expr -> Expr
-replace (name, replacement) = cata f
+replace (name, replacement) = para f
     where
-        f :: ExprF Expr -> Expr
+        f :: ExprF (Expr, Expr) -> Expr
         f v =
-            case v of
-              Pair (VarF varName) hatch
-                | varName == name -> replacement
-                | otherwise       -> Fix $ Pair (VarF varName) hatch
-              y -> Fix y
+            let unchanged = fst <$> v
+                changed = snd <$> v
+            in
+            case changed of
+              Pair (VarF varName) Nothing
+                | name == varName -> replacement
+                | otherwise       -> Fix $ Pair (VarF varName) Nothing
+              Pair (LetF letName _ _) _
+                | name == letName -> embed unchanged
+                | otherwise       -> embed changed
+              Pair (AbsF names _) _
+                | name `elem` names -> embed unchanged
+                | otherwise         -> embed changed
+              _ -> embed changed
+
 
 --bindVars :: RawExprF (Env -> Expr) -> Env -> Expr
 --bindVars expr env =
@@ -342,9 +352,11 @@ repl expr = do
 env :: Env
 env = set "x" (Fix (Pair (LitF (Int 3)) Nothing)) empty
 
+primEQ    = PrimOpR $ PrimOp "=" [TInt, TInt] (\[Int i, Int j] -> Bool $ i == j)
 primLT    = PrimOpR $ PrimOp "<" [TInt, TInt] (\[Int i, Int j] -> Bool $ i < j)
 primTimes = PrimOpR $ PrimOp "*" [TInt, TInt] (\[Int i, Int j] -> Int $ i * j)
 primPlus  = PrimOpR $ PrimOp "+" [TInt, TInt] (\[Int i, Int j] -> Int $ i + j)
+primMinus = PrimOpR $ PrimOp "-" [TInt, TInt] (\[Int i, Int j] -> Int $ i - j)
 
 ex_simple :: RawExpr
 ex_simple =
@@ -380,3 +392,39 @@ ex_lambda =
         (AppR primTimes [AppR (VarR "plusTwo") [VarR "x"], LitR (Int 3)])
 
 ex_lambda' = glorify ex_lambda env
+
+ex_fac :: RawExpr
+ex_fac =
+    LetR "fac"
+        (AbsR ["i"]
+            (IfR
+                (AppR primLT
+                    [VarR "i"
+                    ,LitR (Int 1)
+                    ])
+                (LitR (Int 1))
+                (AppR primTimes
+                    [VarR "i"
+                    ,AppR (VarR "fac")
+                        [AppR primMinus
+                            [VarR "i"
+                            ,LitR (Int 1)
+                            ]]])))
+        (AppR (VarR "fac") [LitR (Int 3)])
+
+ex_fac' = glorify ex_fac env
+
+church_nil :: RawExpr
+church_nil = AbsR ["cons", "nil"] (VarR "nil")
+
+church_cons :: RawExpr
+church_cons = AbsR ["head", "tail"] $ AbsR ["cons", "nil"] (AppR (VarR "cons") [VarR "head", AppR (VarR "tail") [VarR "cons", VarR "nil"]])
+
+ex_church =
+    LetR "nil" church_nil
+    $ LetR "cons" church_cons
+    $ LetR "list"
+        (AppR (VarR "cons") [LitR $ Int 4, AppR (VarR "cons") [LitR $ Int 2, AppR (VarR "cons") [LitR $ Int 3, VarR "nil"]]])
+        (AppR (VarR "list") [primTimes, LitR $ Int 1])
+
+ex_church' = glorify ex_church env
