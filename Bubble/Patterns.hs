@@ -8,6 +8,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
@@ -31,6 +32,7 @@ import Data.List.NonEmpty (NonEmpty(..), (<|))
 import Data.Functor ((<&>))
 import GHC.Exts (IsString(..))
 import qualified Data.Foldable
+import Data.Char (isUpper)
 
 {------------------------------------------------------------------------------
                                 RAW EXPRESSIONS
@@ -46,8 +48,8 @@ data RawExprF a
     | VarF String
     | IfF  a a a
     | EConsF (Cons a)
-    | CaseF a [(Pattern String, a)]
-    | LetF String a a
+    | CaseF a [(Pattern Name, a)]
+    | LetF Name a a
     | PrimOpF PrimOp
     deriving (Functor, Foldable, Traversable)
 
@@ -62,6 +64,30 @@ pattern EConsR name args = Fix (EConsF (Cons name args))
 pattern CaseR scrut branches = Fix (CaseF scrut branches)
 pattern PrimOpR prim = Fix (PrimOpF prim)
 
+-- Names
+data Name = Name
+    { string :: String
+    , fixity :: Fixity
+    , variety :: Variety
+    }
+    deriving (Show, Eq)
+data Fixity = Infix | Prefix
+    deriving (Show, Eq)
+data Variety = Con | Var
+    deriving (Show, Eq)
+
+prettyName Name {..} targetFixity
+  = if targetFixity == Prefix && fixity == Infix then "(" ++ string ++ ")" else string
+
+instance IsString Name where
+    fromString name = Name name fixity variety
+        where
+        special x = elem x ("!#$%&⋆+./<=>?@\\^|-~:" :: String)
+        fixity = if special (head name) then Infix else Prefix
+        variety = case fixity of
+                    Infix -> if elem ':' name then Con else Var
+                    Prefix -> if isUpper (head name) then Con else Var
+
 -- Primitive operations
 data PrimOp = PrimOp
     { primOpName :: String
@@ -72,7 +98,7 @@ instance Show PrimOp where
     show (PrimOp name _ _) = name
 
 -- Constructors
-data Cons a = Cons String [a]
+data Cons a = Cons Name [a]
     deriving (Show, Functor, Foldable, Traversable)
 
 -- Patterns to match with
@@ -83,14 +109,21 @@ data Pattern a
     | PEscape a
     deriving (Show, Functor, Foldable, Traversable)
 
-prettyPat :: Pattern String -> String
-prettyPat (PCons (Cons name args)) = name ++ " " ++ unwords (prettyPat <$> args)
+prettyPat :: Pattern Name -> String
+prettyPat (PCons (Cons name args)) =
+    let prettyArgs = prettyPat <$> args
+    in
+    if fixity name == Infix
+       then unwords $ case prettyArgs of
+                        (a1:aRest) -> a1 : string name : aRest
+                        []         -> [string name]
+       else unwords (string name : prettyArgs)
 prettyPat PWildcard = "_"
 prettyPat (PLiteral lit) = prettyLit lit
-prettyPat (PEscape a) = a
+prettyPat (PEscape a) = string a
 
-patternNames :: Pattern a -> [a]
-patternNames = Data.Foldable.toList
+patternNames :: Pattern Name -> [String]
+patternNames pat = string <$> Data.Foldable.toList pat
 
 instance IsString (Pattern String) where
     fromString = PEscape
@@ -141,16 +174,16 @@ toLit (Fix (Pair (LitF lit) _)) = Just lit
 toLit _ = Nothing
 
 -- Match a refined expression against a pattern
-matchPat :: Pattern String -> Expr -> Maybe [(String, Expr)]
+matchPat :: Pattern Name -> Expr -> Maybe [(String, Expr)]
 matchPat (PCons (Cons consFormal formals)) (EConsG _ (Cons consReal reals))
     = do
-        guard $ consFormal == consReal
+        guard $ string consFormal == string consReal
         guard $ length formals == length reals
         matchings <- sequence $ zipWith matchPat formals reals
         pure $ concat matchings
 matchPat PWildcard expr = Just []
 matchPat (PLiteral formal) (LitG _ real) = guard (formal == real) >> pure []
-matchPat (PEscape formal) real = pure $ [(formal, real)]
+matchPat (PEscape formal) real = pure $ [(string formal, real)]
 matchPat _ _ = Nothing
 
 {------------------------------------------------------------------------------
@@ -188,8 +221,8 @@ replace (name, replacement) = para f
                 | name == varName -> replacement
                 | otherwise       -> Fix $ Pair (VarF varName) Nothing
               Pair (LetF letName _ _) _
-                | name == letName -> unchanged
-                | otherwise       -> changed
+                | name == string letName -> unchanged
+                | otherwise              -> changed
               Pair (AbsF names _) _
                 | name `elem` names -> unchanged
                 | otherwise         -> changed
@@ -281,7 +314,7 @@ hansel = para f
                       _                          -> Left "Incompatible crumb and constructor."
 
 {------------------------------------------------------------------------------
-                          GLORIFICATION & CONDEMNATION
+                             REFINEMENT & RUINATION
                       where RawExprs & Exprs trade places
 ------------------------------------------------------------------------------}
 
@@ -298,7 +331,7 @@ refine = cata f
         modifyEnv :: RawExprF (Env -> Expr) -> Env -> RawExprF Expr
         modifyEnv (LetF name expr body)    env = LetF name expr' (body env')
             where
-                env' = set name expr' env
+                env' = set (string name) expr' env
                 expr' = expr env'
         modifyEnv (AbsF names body)        env = AbsF names $ body $ foldr remove env names
         modifyEnv (CaseF scrutee branches) env = CaseF (scrutee env) (map handleBranch branches)
@@ -342,7 +375,7 @@ rehatch _ (AppF func args) =
 rehatch _ (AbsF args body) = -- Escape hatch if lambda has no remaining arguments, will become useful when AppF becomes curried/partial-aware
     if null args then Just body else Nothing
 rehatch _ (LetF name expr body) = -- Escape hatch at any point by substituting in the body - will need further logic when patterns are implemented
-    Just $ replace (name, expr) body
+    Just $ replace (string name, expr) body
 rehatch _ (CaseF scrutee branches) = -- Escape hatch when a pattern matches the scrutee
     let f [] = Nothing
         f ((pat, body):rest) =
@@ -375,8 +408,11 @@ prettyRaw = unlines . N.toList . cata toLines
         indent = fmap ("  " ++)
 
         parenthesize :: NonEmpty String -> NonEmpty String
-        parenthesize (line :| []) = ("(" ++ line ++ ")") :| []
-        parenthesize (line :| xs) = ("(" ++ line) :| (init xs ++ [last xs ++ ")"])
+        parenthesize x = ("(" :| []) `fuse` x `fuse` (")" :| [])
+
+        fuse :: NonEmpty String -> NonEmpty String -> NonEmpty String
+        fuse (a :| []) (b :| bs) = (a ++ b) :| bs
+        fuse (a :| as) (b :| bs) = a :| (init as ++ [last as ++ b] ++ bs)
 
         toLines :: RawExprF (NonEmpty String) -> NonEmpty String
         toLines (LitF lit) = line $ prettyLit lit
@@ -385,11 +421,23 @@ prettyRaw = unlines . N.toList . cata toLines
         toLines (VarF name) = line name
         toLines (IfF cond true false) = line "if" <> indent cond <> line "then" <> indent true <> line "else" <> indent false
         toLines (PrimOpF op) = line $ show op
-        toLines (LetF name bound body) = line ("let " ++ name ++ " =") <> indent bound <> line "in" <> indent body
-        toLines (EConsF (Cons name args)) = parenthesize $ nec' name (indent <$> args)
-        toLines (CaseF scrutee branches) = line "case" <> indent (parenthesize scrutee <> nec' "of" (handleBranch <$> branches))
+        toLines (LetF name bound body) = line ("let " ++ prettyName name Prefix ++ " =") <> indent bound <> line "in" <> indent body
+        toLines (EConsF (Cons name args)) =
+            case fixity name of -- Very messy...
+              Prefix -> nec' (prettyName name Prefix) (indent <$> args)
+              Infix  -> case args of
+                          (x:y:xs) ->
+                              if length x <= 1
+                                  then x `fuse` line (prettyName name Infix) `fuse` nec (y:xs)
+                                  else x <> indent (nec' (prettyName name Infix) xs)
+                          (x:[]) ->
+                              if length x <= 1
+                                  then parenthesize $ x `fuse` line (prettyName name Infix)
+                                  else x <> indent (line (prettyName name Infix))
+                          ([]) -> line (prettyName name Prefix)
+        toLines (CaseF scrutee branches) = line "case" <> indent scrutee <> nec' "of" (indent . handleBranch <$> branches)
             where
-                handleBranch (pat, body) = line (prettyPat pat) <> indent (line "->" <> body)
+                handleBranch (pat, body) = line (prettyPat pat ++ " ->") <> indent body
 
 pretty :: Either String Expr -> IO ()
 pretty = \case
@@ -486,7 +534,7 @@ ex_fac =
                             ]]])))
         (AppR (VarR "fac") [LitR (Int 3)])
 
-ex_fac' = refine ex_fac env
+ex_fac' = refine ex_fac empty
 
 ex_foldr :: RawExpr
 ex_foldr =
@@ -498,6 +546,6 @@ ex_foldr =
                 ,(PCons (Cons "[]" []),
                     VarR "base")
                 ]))
-        (AppR (VarR "foldr") [primPlus, LitR (Int 1), EConsR ":" [LitR (Int 2), EConsR ":" [LitR (Int 3), EConsR "[]" []]]])
+        (AppR (VarR "foldr") [primPlus, LitR (Int 7), EConsR ":" [LitR (Int 2), EConsR ":" [LitR (Int 3), EConsR "[]" []]]])
 
-ex_foldr' = refine ex_foldr env
+ex_foldr' = refine ex_foldr empty
