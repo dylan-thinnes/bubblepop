@@ -329,7 +329,7 @@ refine = cata f
         memo env x = Pair x (envHatch env x)
 
         modifyEnv :: RawExprF (Env -> Expr) -> Env -> RawExprF Expr
-        modifyEnv (LetF name expr body)    env = LetF name expr' (body env')
+        modifyEnv (LetF name expr body)    env = LetF name expr' (body $ remove (string name) env')
             where
                 env' = set (string name) expr' env
                 expr' = expr env'
