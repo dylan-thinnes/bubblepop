@@ -31,6 +31,8 @@ executable bubblepop
     Bubble.Utils
     Bubble.Patterns
     Bubble.PatternsWOReplaceLet
+    Bubble.Zipper
+    Bubble.ZipperFamilies
   -- other-extensions:
   build-depends:
     base >=4.12 && <4.13,
