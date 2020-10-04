@@ -435,7 +435,7 @@ prettyRaw = unlines . N.toList . cata toLines
                                   then parenthesize $ x `fuse` line (prettyName name Infix)
                                   else x <> indent (line (prettyName name Infix))
                           ([]) -> line (prettyName name Prefix)
-        toLines (CaseF scrutee branches) = line "case" <> indent scrutee <> nec' "of" (indent . handleBranch <$> branches)
+        toLines (CaseF scrutee branches) = parenthesize $ line "case" <> indent scrutee <> nec' "of" (indent . handleBranch <$> branches)
             where
                 handleBranch (pat, body) = line (prettyPat pat ++ " ->") <> indent body
 
