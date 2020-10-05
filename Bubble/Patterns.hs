@@ -549,3 +549,17 @@ ex_foldr =
         (AppR (VarR "foldr") [primPlus, LitR (Int 7), EConsR ":" [LitR (Int 2), EConsR ":" [LitR (Int 3), EConsR "[]" []]]])
 
 ex_foldr' = refine ex_foldr empty
+
+ex_deep_case :: RawExpr
+ex_deep_case =
+    LetR "x"
+        (EConsR "Just" [EConsR "Just" [LitR (Int 10)]])
+        (CaseR
+            (VarR "x")
+            [(PCons $ Cons "Just" [PCons $ Cons "Just" [PEscape "y"]], VarR "y")
+            ,(PCons $ Cons "Just" [PCons $ Cons "Nothing" []], LitR (Int 2))
+            ,(PCons $ Cons "Nothing" [], LitR (Int 1))
+            ]
+        )
+
+ex_deep_case' = refine ex_deep_case empty
