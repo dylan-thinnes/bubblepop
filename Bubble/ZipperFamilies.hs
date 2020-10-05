@@ -2,6 +2,7 @@
 {-# LANGUAGE TupleSections #-}
 -- Advanced syntactical sugar:
 {-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE ViewPatterns #-}
 -- GHC magic:
 {-# LANGUAGE DeriveFunctor, DeriveFoldable, DeriveTraversable #-}
 {-# LANGUAGE TemplateHaskell #-}
@@ -11,6 +12,8 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 module Bubble.ZipperFamilies where
 
+import Prelude hiding (lookup)
+
 import Data.Void
 import Data.Fix
 import Data.Functor.Product
@@ -18,6 +21,7 @@ import Data.Functor.Const
 import Data.Functor.Sum
 import Data.Functor.Foldable
 import Control.Monad
+import Data.Map (Map, lookup, insert, delete)
 
 import Text.Show.Deriving (deriveShow1)
 
@@ -69,6 +73,9 @@ newtype ExprHF a = ExprHF (Product ExprF Maybe a)
     deriving Functor
 type ExprH = Fix ExprHF
 
+pattern EHF expr hatch = ExprHF (Pair expr hatch)
+pattern EH expr hatch = Fix (EHF expr hatch)
+
 type ExprHCrumb = Product ExprCrumb Maybe
 
 instance Crumb ExprHF ExprHCrumb where
@@ -79,49 +86,89 @@ instance Crumb ExprHF ExprHCrumb where
         let expr = upC crumb subexpr
          in ExprHF $ Pair expr hatch
 
---instance Crumb Maybe (Const ()) where
---    downC _ x    = fmap (Const (),) x
---    upC   _ expr = Fix $ Just expr
---
+-- Generic crumbs for functor products & maybe functor
+-- Demonstrates product rule of derivative
+
 --instance (Crumb b1 c1, Crumb b2 c2) => Crumb (Product b1 b2) (Sum (Product b1 c2) (Product b2 c1)) where
 --    downC (InL (Pair b1 c2)) = undefined
 --    downC (InR (Pair b2 c1)) = undefined
 --    upC   = undefined
 
-    {-
+--instance Crumb Maybe (Const ()) where
+--    downC _ x    = fmap (Const (),) x
+--    upC   _ expr = Fix $ Just expr
+
 -- Expression Zipper
-type Zipper = ([Crumb Expr], Expr)
+type Zipper expr crumb = ([crumb (Fix expr)], Fix expr)
 
-up :: Zipper -> Maybe Zipper
+up :: Crumb expr crumb => Zipper expr crumb -> Maybe (Zipper expr crumb)
 up ([],   _)    = Nothing
-up (c:cs, expr) = Just (cs, upC c expr)
+up (c:cs, expr) = Just (cs, Fix $ upC c expr)
 
-down :: Crumb b -> Zipper -> Maybe Zipper
+down :: Crumb expr crumb => crumb any -> Zipper expr crumb -> Maybe (Zipper expr crumb)
 down oldCrumb (trail, oldExpr) = do
     (crumb, expr) <- downC oldCrumb (project oldExpr)
-    pure (crumb:trail, expr)
+    Just (crumb:trail, expr)
 
-top :: Zipper -> Zipper
+top :: Crumb expr crumb => Zipper expr crumb -> Zipper expr crumb
 top z = case up z of
           Nothing -> z
           Just z' -> top z'
 
-follow :: [Crumb b] -> Zipper -> Maybe Zipper
+follow :: Crumb expr crumb => [crumb any] -> Zipper expr crumb -> Maybe (Zipper expr crumb)
 follow crumbs z = foldr (\crumb mz -> mz >>= down crumb) (pure z) (reverse crumbs)
 
-toZipper :: Expr -> Zipper
+toZipper :: Fix expr -> Zipper expr crumb
 toZipper = ([],)
 
--- Hatched Expressions
-type HatchedF = Product ExprF Maybe
-type Hatched = Fix HatchedF
+-- Algebra transformations
+liftCata :: (ExprF b -> a) -> (ExprHF b -> a)
+liftCata alg (ExprHF (Pair expr _)) = alg expr
 
-pattern Hatch   expr hatch = Fix (Pair expr (Just hatch))
-pattern NoHatch expr       = Fix (Pair expr Nothing)
+lowerAna :: (a -> ExprHF b) -> (a -> ExprF b)
+lowerAna alg a = let (ExprHF (Pair expr _)) = alg a in expr
 
-data CrumbZ a
-    = L (Product Crumb Maybe a)
-    | R (ExprF a)
+type Env = Map String ExprH
+
+--refine :: ExprF (Env -> ExprH) -> (Env -> ExprH)
+--refine expr env = Fix $ memo env $ modifyEnv expr env
+--    where
+--    memo :: Env -> ExprF ExprH -> ExprHF ExprH
+--    memo env x = ExprHF $ Pair x (envHatch env x)
+--
+--    modifyEnv :: ExprF (Env -> ExprH) -> Env -> ExprF ExprH
+--    modifyEnv (CaseF scrutee branches) env = CaseF (scrutee env) (map handleBranch branches)
+--        where
+--            handleBranch (pat, branch) = (pat, branch $ foldr remove env (patternNames pat))
+--    modifyEnv f                        env = ($ env) <$> f
+
+envHatch :: Env -> ExprF ExprH -> Maybe ExprH
+envHatch env (VarF e) = lookup e env
+envHatch _   expr     = rehatch expr
+
+rehatch :: ExprF ExprH -> Maybe ExprH
+rehatch (VarF _) = Nothing
+rehatch (AbsF _ _) = Nothing
+rehatch (AppF fun arg) =
+    case fun of
+      EH (AbsF name body) _ -> Just $ replace body (name, arg)
+      _                     -> Nothing
+
+replaceF :: ExprHF (ExprH, (String, ExprH) -> ExprH) -> (String, ExprH) -> ExprH
+replaceF (EHF expr paraHatch) replacement@(name, value) =
+    let hatch = fmap fst paraHatch
+    in
+    case expr of
+      VarF n                    -> if name == n
+                                      then value
+                                      else EH (VarF n) hatch
+      AbsF n (oldBody, newBody) -> if name == n
+                                      then EH (AbsF n oldBody) hatch
+                                      else EH (AbsF n (newBody replacement)) hatch
+      AppF (_, fun) (_, arg)   -> EH (AppF (fun replacement) (arg replacement)) hatch
+replaceF _ _ = undefined -- Not sure why GHC is giving me an inexhaustive match here...
+
+replace = para replaceF
 
 -- Examples:
 deriveShow1 ''ExprF
@@ -130,4 +177,3 @@ s, k, i :: Expr
 s = Abs "x" $ Abs "y" $ Abs "z" $ App (App (Var "x") (Var "z")) (App (Var "y") (Var "z"))
 k = Abs "x" $ Abs "y" $ Var "x"
 i = Abs "x" $ Var "x"
-    -}
