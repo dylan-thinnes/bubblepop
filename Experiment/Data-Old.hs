@@ -16,7 +16,7 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
 
-module Bubble.Data where
+module Experiment.Data where
 
 import Data.Functor.Classes (Show1(..))
 

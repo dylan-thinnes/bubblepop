@@ -5,7 +5,7 @@
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ExistentialQuantification #-}
-module Bubble.Parser where
+module Experiment.Parser where
 
 import Text.Megaparsec hiding (getOffset)
 import qualified Text.Megaparsec as M
@@ -15,7 +15,7 @@ import Data.Text (Text)
 
 import Data.Void
 
-import Bubble.Data
+import Experiment.Data
 
 -- type Parser = Parsec Void Text
 -- 

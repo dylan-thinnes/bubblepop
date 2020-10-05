@@ -20,19 +20,19 @@ executable bubblepop
   main-is:             Main.hs
   other-modules:
     LearnParsing
-    Bubble.Data
-    Bubble.Parser
-    Bubble.Flat
-    Bubble.Simple
-    Bubble.Fix2
-    Bubble.Carrier
-    Bubble.Hatches
-    Bubble.Cooperate
-    Bubble.Utils
-    Bubble.Patterns
-    Bubble.PatternsWOReplaceLet
-    Bubble.Zipper
-    Bubble.ZipperFamilies
+    Experiment.Data
+    Experiment.Parser
+    Experiment.Flat
+    Experiment.Simple
+    Experiment.Fix2
+    Experiment.Carrier
+    Experiment.Hatches
+    Experiment.Cooperate
+    Experiment.Utils
+    Experiment.Patterns
+    Experiment.PatternsWOReplaceLet
+    Experiment.Zipper
+    Experiment.ZipperFamilies
   -- other-extensions:
   build-depends:
     base >=4.12 && <4.13,

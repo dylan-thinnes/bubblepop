@@ -1,8 +1,8 @@
 module Main where
 
-import Bubble.Data
-import Bubble.Parser
+import Experiment.Data
+import Experiment.Parser
 import LearnParsing
-import Bubble.Patterns
+import Experiment.Patterns
 
 main = repl "Started." ex_foldr'

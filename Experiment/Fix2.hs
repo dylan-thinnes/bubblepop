@@ -8,7 +8,7 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
 
-module Bubble.Fix2 where
+module Experiment.Fix2 where
 
 import qualified Data.Map as M
 import Data.Map (Map, (!?), insert, empty, fromList)

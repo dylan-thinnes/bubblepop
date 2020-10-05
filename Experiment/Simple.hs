@@ -6,7 +6,7 @@
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TemplateHaskell #-}
-module Bubble.Simple where
+module Experiment.Simple where
 
 import Text.Show.Deriving
 

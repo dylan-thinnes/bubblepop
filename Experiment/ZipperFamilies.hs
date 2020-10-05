@@ -10,7 +10,7 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE InstanceSigs #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-module Bubble.ZipperFamilies where
+module Experiment.ZipperFamilies where
 
 import Prelude hiding (lookup)
 

@@ -18,7 +18,7 @@
 
 {-# OPTIONS_GHC -Wno-unused-matches #-}
 
-module Bubble.Patterns where
+module Experiment.Patterns where
 
 import qualified Data.Map as M
 import Data.Map (Map, (!?), insert, fromList, delete)

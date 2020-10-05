@@ -14,7 +14,7 @@
 
 {-# OPTIONS_GHC -Wno-unused-matches #-}
 
-module Bubble.Cooperate where
+module Experiment.Cooperate where
 
 import qualified Data.Map as M
 import Data.Map (Map, (!?), insert, fromList, delete)

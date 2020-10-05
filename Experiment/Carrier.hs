@@ -14,7 +14,7 @@
 
 {-# OPTIONS_GHC -Wno-unused-matches #-}
 
-module Bubble.Carrier where
+module Experiment.Carrier where
 
 import qualified Data.Map as M
 import Data.Map (Map, (!?), insert, fromList, delete)

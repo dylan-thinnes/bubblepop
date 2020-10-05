@@ -12,7 +12,7 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
 
-module Bubble.Utils where
+module Experiment.Utils where
 
 -- MISC
 type GrowHoF grow k = HoF grow -> HoF k -> HoF k

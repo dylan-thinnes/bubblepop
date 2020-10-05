@@ -5,7 +5,7 @@
 -- GHC magic:
 {-# LANGUAGE DeriveFunctor, DeriveFoldable, DeriveTraversable #-}
 {-# LANGUAGE TemplateHaskell #-}
-module Bubble.Zipper where
+module Experiment.Zipper where
 
 import Data.Void
 import Data.Fix

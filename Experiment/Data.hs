@@ -17,9 +17,9 @@
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE ViewPatterns #-}
 
-module Bubble.Data where
+module Experiment.Data where
 
-import Bubble.Utils
+import Experiment.Utils
 
 import Data.Functor.Classes (Show1 (..))
 

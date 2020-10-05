@@ -4,7 +4,7 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE TypeFamilies #-}
 
-module Bubble.Flat where
+module Experiment.Flat where
 
 data TreeTag = TypeTree | ExprTree | DeclTree
 data ConsTag = ExprT ExprTag | TypeT TypeTag
