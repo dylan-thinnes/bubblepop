@@ -33,6 +33,9 @@ executable bubblepop
     Experiment.PatternsWOReplaceLet
     Experiment.Zipper
     Experiment.ZipperFamilies
+    Bubble.Expr
+    Bubble.Examples
+    Bubble.IO
   -- other-extensions:
   build-depends:
     base >=4.12 && <4.13,
