@@ -19,23 +19,26 @@ extra-source-files:  CHANGELOG.md
 executable bubblepop
   main-is:             Main.hs
   other-modules:
-    LearnParsing
-    Experiment.Data
-    Experiment.Parser
-    Experiment.Flat
-    Experiment.Simple
-    Experiment.Fix2
-    Experiment.Carrier
-    Experiment.Hatches
-    Experiment.Cooperate
-    Experiment.Utils
-    Experiment.Patterns
-    Experiment.PatternsWOReplaceLet
-    Experiment.Zipper
+    Bubble.Expr,
+    Bubble.Examples,
+    Bubble.IO,
+    Bubble.Parser,
+    Bubble.Lift,
+    Bubble.Breadcrumbs,
+    Bubble.Optimizations,
+    Experiment.Data,
+    Experiment.Parser,
+    Experiment.Flat,
+    Experiment.Simple,
+    Experiment.Fix2,
+    Experiment.Carrier,
+    Experiment.Hatches,
+    Experiment.Cooperate,
+    Experiment.Utils,
+    Experiment.Patterns,
+    Experiment.PatternsWOReplaceLet,
+    Experiment.Zipper,
     Experiment.ZipperFamilies
-    Bubble.Expr
-    Bubble.Examples
-    Bubble.IO
   -- other-extensions:
   build-depends:
     base >=4.12 && <4.13,
@@ -47,7 +50,11 @@ executable bubblepop
     containers,
     bifunctors,
     free,
-    deriving-compat
+    deriving-compat,
+    template-haskell,
+    prettyprinter,
+    json,
+    mtl
   -- hs-source-dirs:
   default-language:    Haskell2010
   ghc-options:
