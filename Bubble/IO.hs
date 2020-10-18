@@ -1,10 +1,20 @@
-{-# LANGUAGE LambdaCase, MultiWayIf #-}
+{-# LANGUAGE LambdaCase, MultiWayIf, ViewPatterns #-}
 module Bubble.IO where
 
 import Bubble.Expr
+import Bubble.Breadcrumbs
 import Data.Functor.Foldable hiding (Cons)
 import qualified Data.List.NonEmpty as N
 import Data.List.NonEmpty (NonEmpty(..), (<|))
+import Prettyprinter
+import Prettyprinter.Render.Util.SimpleDocTree
+import qualified Data.Text as T
+import Text.JSON
+import Data.Functor.Product (Product(..))
+
+import Control.Monad.State
+import Data.Maybe (isJust)
+import Control.Comonad.Cofree
 
 {------------------------------------------------------------------------------
                              IO & USER INTERACTION
@@ -34,9 +44,10 @@ prettyRaw = unlines . N.toList . cata toLines
 
         toLines :: RawExprF (NonEmpty String) -> NonEmpty String
         toLines (LitF lit) = line $ prettyLit lit
+        toLines (AnnF _ cont) = cont
         toLines (AppF body args) = body <> indent (nec args)
         toLines (AbsF args body) = parenthesize $ ("\\" ++ unwords args ++ " ->") <| indent body
-        toLines (VarF name) = line name
+        toLines (VarF name) = line $ string name -- TODO: infix operators need parens
         toLines (IfF cond true false) = line "if" <> indent cond <> line "then" <> indent true <> line "else" <> indent false
         toLines (PrimOpF op) = line $ show op
         toLines (LetF name bound body) = line ("let " ++ prettyName name Prefix ++ " =") <> indent bound <> line "in" <> indent body
@@ -57,18 +68,18 @@ prettyRaw = unlines . N.toList . cata toLines
             where
                 handleBranch (pat, body) = line (prettyPat pat ++ " ->") <> indent body
 
-pretty :: Either String Expr -> IO ()
-pretty = \case
-    Left e -> putStrLn $ "Error: " ++ e
-    Right e -> putStrLn $ prettyRaw $ ruin e
+--pretty :: Either String Expr -> IO ()
+--pretty = \case
+--    Left e -> putStrLn $ "Error: " ++ e
+--    Right e -> putStrLn $ prettyRaw $ ruin e
 
-repl :: String -> Expr -> IO Expr
+repl :: String -> Expr Redex -> IO (Expr Redex)
 repl str expr = do
-    putStr "\ESC[2J\ESC[H"
-    putStrLn "============================================"
+    clearLine
     putStrLn str
     putStrLn $ prettyRaw $ ruin expr
-    let options = crumbtrails expr
+    let sprinkled = sprinkle expr
+    let options = pickup sprinkled
     if null options then pure expr
         else do
             mapM_ (uncurry showOption) (zip [0..] options)
@@ -77,10 +88,86 @@ repl str expr = do
                | i >= length options -> repl "Error: Option index out of bounds." expr
                | otherwise -> do
                     let crumb = options !! i
-                    case hansel expr crumb of
-                      Left err -> repl ("Error: " ++ err) expr
-                      Right newExpr -> repl "Success." $ rerefine newExpr
+                    repl "Success." $ rerefine $ autorun $ rerefine $ autorun $ eat sprinkled crumb
     where
         showOption i option = putStr (show i ++ ": ") >> print option
 
+repl' :: Expr Redex -> IO (Expr Redex)
+repl' orig = recurse "Started..." $ stepAll orig
+    where
+        showOption i (trail, _) = putStr (show i ++ ": ") >> print trail
+        recurse message self@(expr :< (unLMap -> branches)) = do
+            clearLine
+            putStrLn message
+            putStrLn $ prettyRaw $ ruin expr
+            if null branches
+               then pure expr
+               else do
+                    mapM_ (uncurry showOption) (zip [0..] branches)
+                    i <- readLn
+                    if | i < 0
+                       -> do
+                           putStrLn "Aborting early due to negative index."
+                           pure expr
+                       | i >= length branches
+                       -> recurse "Error: Option index out of bounds." self
+                       | otherwise
+                       -> recurse "Success" $ snd $ branches !! i
 
+clearLine :: IO ()
+clearLine = do
+    putStr "\ESC[2J\ESC[H"
+    putStrLn "============================================"
+
+    {-
+docRaw' :: Expr i -> Doc Breadcrumbs
+docRaw' e = evalState (cata h e) 0
+    where
+        h :: ExprF (State Int (Doc Int)) -> State Int (Doc Int)
+        h (Pair expr NoRedex) = g False (sequence expr)
+        h (Pair expr (Redex _)) = g True (sequence expr)
+
+        g :: Bool -> State Int (RawExprF (Doc Int)) -> State Int (Doc Int)
+        g hasHatch m = do
+            child <- f <$> m
+            if hasHatch
+               then do
+                    i <- Control.Monad.State.get
+                    modify (+1)
+                    pure $ annotate i child
+               else pure child
+
+        f :: RawExprF (Doc Int) -> Doc Int
+        f (LitF lit) = pretty $ prettyLit lit
+        f (AnnF _ cont) = cont
+        f (AppF body args) = hang 4 $ body <+> align (sep args) -- TODO: Infix operators, precedence for paren-wrapping
+        f (AbsF args body) = hang 4 $ (pretty "\\" <> fillSep (map pretty args ++ [pretty "->"])) <+> body
+        f (VarF name) = pretty (string name) -- TODO: Infix operators in prefix context
+        f (IfF cond true false) = pretty "if" <+> nest 4 cond <+> pretty "then" <+> nest 4 true <+> pretty "else" <+> nest 4 false
+        f (PrimOpF op) = pretty $ show op
+        f (LetF name bound body) = vsep [pretty "let" <+> pretty (string name) <+> pretty "=" <+> nest 4 bound, pretty "in" <+> body]
+        f (EConsF (Cons name args)) = pretty (string name) <+> nest 4 (sep args)
+        f (CaseF scrutee branches) = vsep (pretty "case" <+> nest 4 scrutee <+> pretty "of" : map handle branches)
+            where
+                handle (pat, branch) = hang 4 $ pretty (prettyPat pat) <+> pretty "->" <+> branch
+
+data UIAST = Nodes [UIAST] | Hatched Int UIAST | Raw T.Text
+
+renderUIAST :: SimpleDocTree Int -> UIAST
+renderUIAST sds = case sds of
+    STEmpty -> Raw mempty
+    STChar c -> Raw $ T.singleton c
+    STText _ t -> Raw t
+    STLine i -> Raw $ T.pack $ "\n" <> replicate i ' '
+    STAnn ann content -> Hatched ann (renderUIAST content)
+    STConcat contents -> Nodes $ renderUIAST <$> contents
+
+instance JSON UIAST where
+    readJSON = error "Cannot turn UIAST to JSON - unimplemented!"
+    showJSON (Nodes nodes) = showJSON (fmap showJSON nodes)
+    showJSON (Hatched hatch node) = showJSON $ toJSObject [("hatch", showJSON hatch), ("child", showJSON node)]
+    showJSON (Raw text) = showJSON text
+
+exprToJsonString :: Expr -> String
+exprToJsonString = encode . renderUIAST . treeForm . layoutPretty defaultLayoutOptions . docRaw'
+    -}
