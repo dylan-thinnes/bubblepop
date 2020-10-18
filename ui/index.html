@@ -1,0 +1,45 @@
+<!DOCTYPE HTML>
+<html>
+    <head>
+        <style>
+* {
+    box-sizing: border-box;
+}
+body {
+    padding: 0;
+    margin: 0;
+}
+        </style>
+    </head>
+    <body>
+        <script src="/Main.js"></script>
+        <script>
+            h = () => Math.floor(Math.random() * 100000000)
+
+            ast0 = [{
+                hatch: h(),
+                child: [
+                    "let x = ",
+                    {
+                        hatch: h(),
+                        child: "7"
+                    },
+                    " in ",
+                    {
+                        hatch: h(),
+                        child: "5 + x"
+                    },
+                ]
+            }]
+            ast1 = {"hatch":1,"child":["let"," ","foldr"," ","="," ","\\","f"," ","base"," ","list"," ","->"," ","case"," ","list"," ","of","\n                ","head : rest"," ","->"," ","f"," ","head"," ",{"hatch":0,"child":"foldr"}," ","f"," ","base"," ","rest","\n                ","[]"," ","->"," ","base","\n","in"," ","foldr"," ","+"," ","7"," ",":"," ","2"," ",":"," ","3"," ","[]"," "]}
+            ast2 = {"hatch":5,"child":["let"," ","x"," ","="," ",{"hatch":1,"child":[{"hatch":0,"child":"+"}," ","5"," ","3"]},"\n","in"," ",{"hatch":2,"child":"+"}," ",{"hatch":3,"child":"*"}," ","x"," ","4"," ",{"hatch":4,"child":"+"}," ","6"," ","x"]}
+
+            app = Elm.Main.init({
+                flags: {
+                    initialValue: ast2
+                }
+            });
+
+        </script>
+    </body>
+</html>
