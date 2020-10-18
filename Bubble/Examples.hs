@@ -8,13 +8,16 @@ import Data.Functor.Product
 
 -- Example
 env :: Env
-env = set "x" (Fix (Pair (LitF (Int 3)) Nothing)) empty
+env = set "x" (Fix (Pair (LitF (Int 3)) NoRedex)) empty
 
-primEQ    = PrimOpR $ PrimOp "=" [TInt, TInt] (\[Int i, Int j] -> Bool $ i == j)
-primLT    = PrimOpR $ PrimOp "<" [TInt, TInt] (\[Int i, Int j] -> Bool $ i < j)
-primTimes = PrimOpR $ PrimOp "*" [TInt, TInt] (\[Int i, Int j] -> Int $ i * j)
-primPlus  = PrimOpR $ PrimOp "+" [TInt, TInt] (\[Int i, Int j] -> Int $ i + j)
-primMinus = PrimOpR $ PrimOp "-" [TInt, TInt] (\[Int i, Int j] -> Int $ i - j)
+primEQ    = AnnR "autoapply" $ PrimOpR $ PrimOp "=" [TInt, TInt] (\[Int i, Int j] -> Bool $ i == j)
+primLT    = AnnR "autoapply" $ PrimOpR $ PrimOp "<" [TInt, TInt] (\[Int i, Int j] -> Bool $ i < j)
+primTimes = AnnR "autoapply" $ PrimOpR $ PrimOp "*" [TInt, TInt] (\[Int i, Int j] -> Int $ i * j)
+primPlus  = AnnR "autoapply" $ PrimOpR $ PrimOp "+" [TInt, TInt] (\[Int i, Int j] -> Int $ i + j)
+primMinus = AnnR "autoapply" $ PrimOpR $ PrimOp "-" [TInt, TInt] (\[Int i, Int j] -> Int $ i - j)
+
+primitives :: Env
+primitives = foldr (\def@(AnnR _ (PrimOpR (PrimOp name _ _))) env -> set name (refine def primitives) env) empty [primEQ, primLT, primTimes, primPlus, primMinus]
 
 ex_simple :: RawExpr
 ex_simple =
@@ -100,3 +103,29 @@ ex_deep_case =
 
 ex_deep_case' = refine ex_deep_case empty
 
+ex_autoapply :: Expr Redex
+ex_autoapply = refine expr env
+  where
+    env = set "foldr" (refine foldr env) empty
+    foldr =
+        (AnnR "autoapply"
+            (AbsR ["f", "base", "list"]
+                (AnnR "autorun"
+                    (CaseR (VarR "list")
+                        [(PCons (Cons ":" [PEscape "head", PEscape "rest"]),
+                            AppR (VarR "f") [VarR "head", (AppR (VarR "foldr") [VarR "f", VarR "base", VarR "rest"])])
+                        ,(PCons (Cons "[]" []),
+                            VarR "base")
+                        ]))))
+    expr =
+        AppR
+            (VarR "foldr")
+            [ primPlus
+            , LitR (Int 7)
+            , EConsR ":"
+                [ LitR (Int 2)
+                , EConsR ":"
+                    [ LitR (Int 3)
+                    , EConsR "[]" []
+                    ]
+                ]]
