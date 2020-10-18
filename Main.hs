@@ -1,8 +1,20 @@
-module Main where
+module Main (main) where
 
-import Experiment.Data
-import Experiment.Parser
-import LearnParsing
-import Experiment.Patterns
+import Bubble.Examples
+import Bubble.IO
+import Bubble.Expr
+import Bubble.Parser
+import Bubble.Lift
+import Bubble.Optimizations
 
-main = repl "Started." ex_foldr'
+main = do
+    let ls = do
+            line <- getLine
+            if null line
+               then pure []
+               else (line :) <$> ls
+    clearLine
+    putStrLn "Please enter your expression."
+    str <- unlines <$> ls
+    repl' $ refine (parse str) primitives
+
