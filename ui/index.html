@@ -17,29 +17,42 @@ body {
             h = () => Math.floor(Math.random() * 100000000)
 
             ast0 = [{
-                hatch: h(),
+                crumbtrail: h(),
                 child: [
                     "let x = ",
                     {
-                        hatch: h(),
+                        crumbtrail: h(),
                         child: "7"
                     },
                     " in ",
                     {
-                        hatch: h(),
+                        crumbtrail: h(),
                         child: "5 + x"
                     },
                 ]
             }]
-            ast1 = {"hatch":1,"child":["let"," ","foldr"," ","="," ","\\","f"," ","base"," ","list"," ","->"," ","case"," ","list"," ","of","\n                ","head : rest"," ","->"," ","f"," ","head"," ",{"hatch":0,"child":"foldr"}," ","f"," ","base"," ","rest","\n                ","[]"," ","->"," ","base","\n","in"," ","foldr"," ","+"," ","7"," ",":"," ","2"," ",":"," ","3"," ","[]"," "]}
-            ast2 = {"hatch":5,"child":["let"," ","x"," ","="," ",{"hatch":1,"child":[{"hatch":0,"child":"+"}," ","5"," ","3"]},"\n","in"," ",{"hatch":2,"child":"+"}," ",{"hatch":3,"child":"*"}," ","x"," ","4"," ",{"hatch":4,"child":"+"}," ","6"," ","x"]}
+
+            ast1 = {"crumbtrail":1,"child":["let"," ","foldr"," ","="," ","\\","f"," ","base"," ","list"," ","->"," ","case"," ","list"," ","of","\n                ","head : rest"," ","->"," ","f"," ","head"," ",{"crumbtrail":0,"child":"foldr"}," ","f"," ","base"," ","rest","\n                ","[]"," ","->"," ","base","\n","in"," ","foldr"," ","+"," ","7"," ",":"," ","2"," ",":"," ","3"," ","[]"," "]}
+            ast2 = {"crumbtrail":5,"child":["let"," ","x"," ","="," ",{"crumbtrail":1,"child":[{"crumbtrail":0,"child":"+"}," ","5"," ","3"]},"\n","in"," ",{"crumbtrail":2,"child":"+"}," ",{"crumbtrail":3,"child":"*"}," ","x"," ","4"," ",{"crumbtrail":4,"child":"+"}," ","6"," ","x"]}
+            ast3 = ["if"," ","<"," ","*"," ",{"crumbtrail":["AppArg 0","AppArg 0","IfCond"],"child":"x"}," ","2"," ",{"crumbtrail":["AppArg 1","IfCond"],"child":["*"," ","5"," ","7"]}," ","then"," ",{"crumbtrail":["IfTrue"],"child":"x"}," ","else"," ","y"]
+
+            ws = new WebSocket(`ws://${window.location.hostname}:9001`);
 
             app = Elm.Main.init({
                 flags: {
-                    initialValue: ast2
+                    initialValue: ast3
                 }
             });
 
+            // Websocket
+            var ws = new WebSocket(url);
+
+            // Send data over a pre-initialised WebSocket connection
+            subscribe("send", function(data) {
+              if (ws != null) {
+                ws.send(JSON.stringify(data));
+              }
+            });
         </script>
     </body>
 </html>
