@@ -25,7 +25,7 @@ data Crumb
     | EConsArg Int
     | CaseBody | CaseBranch Int
     | AnnCont
-    deriving (Show, Eq)
+    deriving (Show, Eq, Read)
 
 type Crumbtrail = [Crumb]
 

@@ -1,4 +1,4 @@
-{-# LANGUAGE LambdaCase, MultiWayIf, ViewPatterns #-}
+{-# LANGUAGE LambdaCase, MultiWayIf, ViewPatterns, TypeApplications #-}
 module Bubble.IO where
 
 import Bubble.Expr
@@ -15,6 +15,7 @@ import Data.Functor.Product (Product(..))
 import Control.Monad.State
 import Data.Maybe (isJust)
 import Control.Comonad.Cofree
+import Data.Functor.Const
 
 {------------------------------------------------------------------------------
                              IO & USER INTERACTION
@@ -119,25 +120,14 @@ clearLine = do
     putStr "\ESC[2J\ESC[H"
     putStrLn "============================================"
 
-    {-
-docRaw' :: Expr i -> Doc Breadcrumbs
-docRaw' e = evalState (cata h e) 0
+docRaw' :: Expr (Const (Redex (Crumbtrail, a))) -> Doc Crumbtrail
+docRaw' = cata h
     where
-        h :: ExprF (State Int (Doc Int)) -> State Int (Doc Int)
-        h (Pair expr NoRedex) = g False (sequence expr)
-        h (Pair expr (Redex _)) = g True (sequence expr)
+        h :: ExprF (Const (Redex (Crumbtrail, a))) (Doc Crumbtrail) -> Doc Crumbtrail
+        h (Pair expr (Const NoRedex)) = f expr
+        h (Pair expr (Const (Redex (crumb, _)))) = annotate crumb $ f expr
 
-        g :: Bool -> State Int (RawExprF (Doc Int)) -> State Int (Doc Int)
-        g hasHatch m = do
-            child <- f <$> m
-            if hasHatch
-               then do
-                    i <- Control.Monad.State.get
-                    modify (+1)
-                    pure $ annotate i child
-               else pure child
-
-        f :: RawExprF (Doc Int) -> Doc Int
+        f :: RawExprF (Doc Crumbtrail) -> Doc Crumbtrail
         f (LitF lit) = pretty $ prettyLit lit
         f (AnnF _ cont) = cont
         f (AppF body args) = hang 4 $ body <+> align (sep args) -- TODO: Infix operators, precedence for paren-wrapping
@@ -151,23 +141,26 @@ docRaw' e = evalState (cata h e) 0
             where
                 handle (pat, branch) = hang 4 $ pretty (prettyPat pat) <+> pretty "->" <+> branch
 
-data UIAST = Nodes [UIAST] | Hatched Int UIAST | Raw T.Text
+data UIAST = Nodes [UIAST] | Crumbed Crumbtrail UIAST | Raw T.Text
 
-renderUIAST :: SimpleDocTree Int -> UIAST
+renderUIAST :: SimpleDocTree Crumbtrail -> UIAST
 renderUIAST sds = case sds of
     STEmpty -> Raw mempty
     STChar c -> Raw $ T.singleton c
     STText _ t -> Raw t
     STLine i -> Raw $ T.pack $ "\n" <> replicate i ' '
-    STAnn ann content -> Hatched ann (renderUIAST content)
+    STAnn ann content -> Crumbed ann (renderUIAST content)
     STConcat contents -> Nodes $ renderUIAST <$> contents
 
 instance JSON UIAST where
-    readJSON = error "Cannot turn UIAST to JSON - unimplemented!"
+    readJSON = error "Cannot turn JSON into a UIAST - unimplemented!"
     showJSON (Nodes nodes) = showJSON (fmap showJSON nodes)
-    showJSON (Hatched hatch node) = showJSON $ toJSObject [("hatch", showJSON hatch), ("child", showJSON node)]
+    showJSON (Crumbed trail node) = showJSON $ toJSObject [("crumbtrail", showJSON trail), ("child", showJSON node)]
     showJSON (Raw text) = showJSON text
 
-exprToJsonString :: Expr -> String
-exprToJsonString = encode . renderUIAST . treeForm . layoutPretty defaultLayoutOptions . docRaw'
-    -}
+instance JSON Crumb where
+    readJSON = fmap read <$> (readJSON @String)
+    showJSON = showJSON . show
+
+exprToJsonString :: Expr Redex -> String
+exprToJsonString = encode . renderUIAST . treeForm . layoutPretty defaultLayoutOptions . docRaw' . sprinkle
