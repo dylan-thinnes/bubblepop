@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 module Main (main) where
 
 import Bubble.Examples
@@ -7,7 +8,13 @@ import Bubble.Parser
 import Bubble.Lift
 import Bubble.Optimizations
 
-main = do
+import Network.Wai
+import Network.Wai.Handler.Warp
+
+main = server
+
+cli :: IO ()
+cli = do
     let ls = do
             line <- getLine
             if null line
@@ -18,3 +25,7 @@ main = do
     str <- unlines <$> ls
     repl' $ refine (parse str) primitives
 
+server :: IO ()
+server = run 9001 $ \req handler -> do
+	print "Request!"
+	undefined
