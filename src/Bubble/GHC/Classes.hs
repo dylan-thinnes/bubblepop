@@ -7,7 +7,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
 
-module GHC.Classes where
+module Bubble.GHC.Classes where
 
 import "template-haskell" Language.Haskell.TH
 import "template-haskell" Language.Haskell.TH.Syntax

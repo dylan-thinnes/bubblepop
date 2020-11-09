@@ -5,9 +5,9 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE RecordWildCards #-}
-module GHC.Expr where
+module Bubble.GHC.Expr where
 
-import GHC.Classes
+import Bubble.GHC.Classes
 import Language.Haskell.TH
 import Language.Haskell.TH.Syntax
 import Data.Functor.Foldable

@@ -1,8 +1,8 @@
 {-# LANGUAGE TemplateHaskell, RecordWildCards #-}
-module GHC.Examples where
+module Bubble.GHC.Examples where
 
-import GHC.Expr
-import GHC.Classes
+import Bubble.GHC.Expr
+import Bubble.GHC.Classes
 import Language.Haskell.TH
 import Language.Haskell.TH.Syntax
 

@@ -67,9 +67,9 @@ library
     Experiment.Zipper,
     Experiment.ZipperFamilies,
     Experiment.LambdaCalculusMapping
-    GHC.Classes
-    GHC.Expr
-    GHC.Examples
+    Bubble.GHC.Classes
+    Bubble.GHC.Expr
+    Bubble.GHC.Examples
 
   -- Modules included in this library but not exported.
   -- other-modules:
