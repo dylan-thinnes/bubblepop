@@ -3,7 +3,6 @@ module Bubble.Breadcrumbs where
 
 import Bubble.Expr
 
-import Data.Fix (Fix(..))
 import Data.Functor.Foldable hiding (Cons)
 import Data.Functor.Const
 import Data.Functor.Product
@@ -45,7 +44,7 @@ sprinkle e = para f e []
             children (LitF lit) = LitF lit
             children (PrimOpF op) = PrimOpF op
             children (VarF name) = VarF name
-            children (AppF fun args) = AppF (fun AppFunc) (zipWith ($) args (map AppArg [0..]))
+            children (AppF fixity fun args) = AppF fixity (fun AppFunc) (zipWith ($) args (map AppArg [0..]))
             children (AbsF names body) = AbsF names $ body AbsBody
             children (IfF cond true false) = IfF (cond IfCond) (true IfTrue) (false IfFalse)
             children (LetF name bound body) = LetF name (bound LetBound) (body LetBody)

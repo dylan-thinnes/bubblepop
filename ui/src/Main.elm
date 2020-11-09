@@ -7,6 +7,7 @@ import Css
 import Html.Styled exposing (..)
 import Html.Styled.Attributes exposing (..)
 import Html.Styled.Events exposing (..)
+import Http
 import Json.Decode as Decode exposing (Decoder, Value)
 import Json.Encode as Encode
 import MaterialColor
@@ -25,11 +26,14 @@ type Msg
     | ChangeSourceCode String
     | ChangeCrumbState CrumbState
     | SelectCrumb Crumbtrail
+    | GotHTTPAST (Result.Result Http.Error AST)
+    | ResetExpr
 
 
 type alias Model =
     { mast : Maybe (Result String AST)
     , liveCrumb : CrumbState
+    , originalUrl : Url
     }
 
 
@@ -118,13 +122,13 @@ crumbToString : Crumb -> String
 crumbToString c =
     case c of
         AppArg i ->
-            crumbToTagString c ++ "_" ++ String.fromInt i
+            crumbToTagString c ++ " " ++ String.fromInt i
 
         EConsArg i ->
-            crumbToTagString c ++ "_" ++ String.fromInt i
+            crumbToTagString c ++ " " ++ String.fromInt i
 
         CaseBranch i ->
-            crumbToTagString c ++ "_" ++ String.fromInt i
+            crumbToTagString c ++ " " ++ String.fromInt i
 
         _ ->
             crumbToTagString c
@@ -245,9 +249,27 @@ init flags url _ =
                                 Err <| Decode.errorToString e
                     )
       , liveCrumb = None
+      , originalUrl = url
       }
-    , Cmd.none
+    , getNext { url | path = "/get" } Nothing
     )
+
+
+getNext : Url -> Maybe Crumbtrail -> Cmd Msg
+getNext url mtrail =
+    case mtrail of
+        Just trail ->
+            Http.post
+                { url = Url.toString url
+                , expect = Http.expectJson GotHTTPAST astDecoder
+                , body = Http.jsonBody <| encodeCrumbtrail trail
+                }
+
+        Nothing ->
+            Http.get
+                { url = Url.toString url
+                , expect = Http.expectJson GotHTTPAST astDecoder
+                }
 
 
 view : Model -> Document Msg
@@ -266,6 +288,7 @@ view model =
                     ]
                 ]
                 [ renderMAST model.liveCrumb model.mast
+                , button [ onClick ResetExpr ] [ text "Reset expression" ]
                 , textarea
                     [ css
                         [ Css.resize Css.vertical
@@ -288,15 +311,17 @@ renderMAST liveCrumb mast =
         , stopPropagationOn "mouseleave" <| Decode.succeed ( ChangeCrumbState <| None, True )
         , stopPropagationOn "mouseup" <| Decode.succeed ( ChangeCrumbState <| None, True )
         ]
-        [ case mast of
-            Nothing ->
-                text "No source code has been specified!"
+        [ pre []
+            [ case mast of
+                Nothing ->
+                    text "No source code has been specified!"
 
-            Just (Err e) ->
-                text <| "Err: " ++ e
+                Just (Err e) ->
+                    text <| "Err: " ++ e
 
-            Just (Ok ast) ->
-                renderAST liveCrumb ast
+                Just (Ok ast) ->
+                    renderAST liveCrumb ast
+            ]
         ]
 
 
@@ -361,10 +386,24 @@ update msg model =
             ( model, Cmd.none )
 
         SelectCrumb trail ->
-            ( model, send <| encodeCrumbtrail trail )
+            let
+                { originalUrl } =
+                    model
+            in
+            ( model, getNext { originalUrl | path = "/trail" } (Just trail) )
+
+        ResetExpr ->
+            let
+                { originalUrl } =
+                    model
+            in
+            ( model, getNext { originalUrl | path = "/reset" } Nothing )
 
         ChangeCrumbState c ->
             ( { model | liveCrumb = c }, Cmd.none )
+
+        GotHTTPAST ast ->
+            ( { model | mast = Just <| Result.mapError Debug.toString ast }, Cmd.none )
 
 
 subscriptions : Model -> Sub msg

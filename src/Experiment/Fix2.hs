@@ -15,8 +15,7 @@ import Data.Map (Map, (!?), insert, empty, fromList)
 import Data.Bifunctor
 import qualified Data.Bifunctor.Fix as Bi
 import Data.Bifunctor.TH
-import Data.Fix (Fix(..))
-import Data.Functor.Foldable
+import Data.Functor.Foldable hiding (Cons)
 import Text.Show.Deriving
 import Data.Functor.Classes
 

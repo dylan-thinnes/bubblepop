@@ -15,11 +15,10 @@ module Experiment.ZipperFamilies where
 import Prelude hiding (lookup)
 
 import Data.Void
-import Data.Fix
 import Data.Functor.Product
 import Data.Functor.Const
 import Data.Functor.Sum
-import Data.Functor.Foldable
+import Data.Functor.Foldable hiding (Cons)
 import Control.Monad
 import Data.Map (Map, lookup, insert, delete)
 

@@ -22,7 +22,6 @@ module Experiment.Patterns where
 
 import qualified Data.Map as M
 import Data.Map (Map, (!?), insert, fromList, delete)
-import Data.Fix (Fix(..))
 import Data.Functor.Foldable hiding (Cons)
 import Text.Show.Deriving (deriveShow1)
 import Data.Functor.Product (Product(..))

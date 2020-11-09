@@ -79,7 +79,7 @@ eliteral = LitR <$> literal
 app :: ReadP RawExpr
 app = do
     (func:args) <- sepBy1 (choice [between (char '(') (char ')') expr, var, eliteral]) space1
-    pure $ AppR func args
+    pure $ AppR Prefix func args
 
 abs :: ReadP RawExpr
 abs = do
@@ -89,7 +89,7 @@ abs = do
     string "->"
     white
     body <- expr
-    pure $ AbsR args body
+    pure $ AbsR (map fromString args) body
 
 if_ :: ReadP RawExpr
 if_ = do

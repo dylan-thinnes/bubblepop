@@ -23,7 +23,6 @@ module Bubble.Expr where
 
 import qualified Data.Map as M
 import Data.Map (Map, (!?), insert, fromList, delete)
-import Data.Fix (Fix(..))
 import Data.Functor.Foldable hiding (Cons)
 import Text.Show.Deriving (deriveShow1)
 import Data.Functor.Product (Product(..))
@@ -45,8 +44,8 @@ type RawExpr = Fix RawExprF
 
 data RawExprF a
     = LitF Literal
-    | AppF a [a]
-    | AbsF [String] a
+    | AppF Fixity a [a]
+    | AbsF [Name] a
     | VarF Name
     | IfF  a a a
     | EConsF (Cons a)
@@ -58,7 +57,7 @@ data RawExprF a
 
 -- Pattern synonyms for fixpoint RawExpr
 pattern LitR lit = Fix (LitF lit)
-pattern AppR fun args = Fix (AppF fun args)
+pattern AppR fixity fun args = Fix (AppF fixity fun args)
 pattern AbsR args body = Fix (AbsF args body)
 pattern VarR name = Fix (VarF name)
 pattern IfR cond true false = Fix (IfF cond true false)
@@ -81,12 +80,15 @@ data Variety = Con | Var
     deriving (Show, Eq)
 
 prettyName Name {..} targetFixity
-  = if targetFixity == Prefix && fixity == Infix then "(" ++ string ++ ")" else string
+  = case (targetFixity, fixity) of
+      (Prefix, Infix) -> "(" ++ string ++ ")"
+      (Infix, Prefix) -> "`" ++ string ++ "`"
+      _               -> string
 
 instance IsString Name where
     fromString name = Name name fixity variety
         where
-        special x = elem x ("!#$%&⋆+./<=>?@\\^|-~:" :: String)
+        special x = elem x ("!#$%&*+./<=>?@\\^|-~:" :: String)
         fixity = if special (head name) then Infix else Prefix
         variety = case fixity of
                     Infix -> if elem ':' name then Con else Var
@@ -94,12 +96,12 @@ instance IsString Name where
 
 -- Primitive operations
 data PrimOp = PrimOp
-    { primOpName :: String
+    { primOpName :: Name
     , primOpContract :: [LiteralType]
     , primOpFunc :: [Literal] -> Literal
     }
 instance Show PrimOp where
-    show (PrimOp name _ _) = name
+    show (PrimOp name _ _) = string name
 
 -- Constructors
 data Cons a = Cons Name [a]
@@ -170,12 +172,9 @@ pattern NoRedex = R Nothing
 maybeToRedex :: Maybe a -> Redex a
 maybeToRedex = R
 
-redexToMaybe :: Redex a -> Maybe a
-redexToMaybe = unR
-
 -- Pattern synonyms for refined expressions
 pattern LitG hatch lit             = Fix (Pair (LitF lit)             hatch)
-pattern AppG hatch fun args        = Fix (Pair (AppF fun args)        hatch)
+pattern AppG hatch fixity fun args = Fix (Pair (AppF fixity fun args) hatch)
 pattern AbsG hatch args body       = Fix (Pair (AbsF args body)       hatch)
 pattern VarG hatch name            = Fix (Pair (VarF name)            hatch)
 pattern IfG hatch cond true false  = Fix (Pair (IfF cond true false)  hatch)
@@ -219,7 +218,7 @@ remove :: String -> Env -> Env
 remove name (Env e) = Env $ delete name e
 
 addPrimop :: PrimOp -> Env -> Env
-addPrimop op@(PrimOp name _ _) = set name (Fix $ Pair (PrimOpF op) NoRedex)
+addPrimop op@(PrimOp name _ _) = set (string name) (Fix $ Pair (PrimOpF op) NoRedex)
 
 empty :: Env
 empty = Env (M.empty)
@@ -241,8 +240,8 @@ replace (name, replacement) = para f
                 | name == string letName -> unchanged
                 | otherwise              -> changed
               Pair (AbsF names _) _
-                | name `elem` names -> unchanged
-                | otherwise         -> changed
+                | name `elem` map string names -> unchanged
+                | otherwise                    -> changed
               Pair (CaseF scrutee branches) hatch
                 -> CaseG (snd <$> hatch) (snd scrutee) 
                     $ branches <&> \(pat, body)
@@ -269,11 +268,12 @@ refine = cata f
         memo env x = Pair x (envHatch env x)
 
         modifyEnv :: RawExprF (Env -> Expr Redex) -> Env -> RawExprF (Expr Redex)
-        modifyEnv (LetF name expr body)    env = LetF name expr' (body $ remove (string name) env')
+        --modifyEnv (LetF name expr body)    env = LetF name expr' (body $ remove (string name) env')
+        modifyEnv (LetF name expr body)    env = LetF name expr' (body env')
             where
                 env' = set (string name) expr' env
                 expr' = expr env'
-        modifyEnv (AbsF names body)        env = AbsF names $ body $ foldr remove env names
+        modifyEnv (AbsF names body)        env = AbsF names $ body $ foldr remove env $ map string names
         modifyEnv (CaseF scrutee branches) env = CaseF (scrutee env) (map handleBranch branches)
             where
                 handleBranch (pat, branch) = (pat, branch $ foldr remove env (patternNames pat))
@@ -300,12 +300,12 @@ rehatch _ (IfF cond true false) =
       (Fix (Pair (LitF (Bool True)) _))  -> Redex true
       (Fix (Pair (LitF (Bool False)) _)) -> Redex false
       _                                  -> NoRedex
-rehatch prehatch (AppF func args) =
+rehatch prehatch (AppF fixity func args) =
     case func of
       (AbsG _ names body) ->
           -- Check args & names match, then place recursive `replace` into escape hatch
            if length args == length names
-              then Redex $ foldr replace body (zip names args)
+              then Redex $ foldr replace body (zip (map string names) args)
               else NoRedex -- TODO: signal error, rather than hide an escape hatch
       (PrimOpG _ (PrimOp _ contract func)) -> maybeToRedex $ do
           -- Check args are all literals & cardinality matches, then run
@@ -314,14 +314,15 @@ rehatch prehatch (AppF func args) =
           let result = func lits
           pure $ LitG NoRedex result
       (VarG (Redex (AnnG _ "autoapply" e)) _) ->
-          rehatch prehatch (AppF e args)
+          rehatch prehatch (AppF fixity e args)
       (AnnG _ "autoapply" e) ->
-          rehatch prehatch (AppF e args)
+          rehatch prehatch (AppF fixity e args)
       _ -> NoRedex
 rehatch _ (AbsF args body) = -- Escape hatch if lambda has no remaining arguments, will become useful when AppF becomes curried/partial-aware
     if null args then Redex body else NoRedex
 rehatch _ (LetF name expr body) = -- Escape hatch at any point by substituting in the body - will need further logic when patterns are implemented
-    Redex $ replace (string name, expr) body
+    --Redex $ replace (string name, expr) body
+    Redex body
 rehatch _ (CaseF scrutee branches) = -- Escape hatch when a pattern matches the scrutee
     let f [] = NoRedex
         f ((pat, body):rest) =

@@ -3,12 +3,15 @@ module Bubble.Examples where
 
 import Bubble.Expr
 
-import Data.Fix
+import Data.Functor.Foldable hiding (Cons)
 import Data.Functor.Product
 
 -- Example
 env :: Env
-env = set "x" (Fix (Pair (LitF (Int 3)) NoRedex)) empty
+env = set "x" (Fix (Pair (LitF (Int 3)) NoRedex))
+    $ set "y" (Fix (Pair (LitF (Int 4)) NoRedex))
+    $ set "z" (Fix (Pair (LitF (Int 5)) NoRedex))
+    $ empty
 
 primEQ    = AnnR "autoapply" $ PrimOpR $ PrimOp "=" [TInt, TInt] (\[Int i, Int j] -> Bool $ i == j)
 primLT    = AnnR "autoapply" $ PrimOpR $ PrimOp "<" [TInt, TInt] (\[Int i, Int j] -> Bool $ i < j)
@@ -17,24 +20,12 @@ primPlus  = AnnR "autoapply" $ PrimOpR $ PrimOp "+" [TInt, TInt] (\[Int i, Int j
 primMinus = AnnR "autoapply" $ PrimOpR $ PrimOp "-" [TInt, TInt] (\[Int i, Int j] -> Int $ i - j)
 
 primitives :: Env
-primitives = foldr (\def@(AnnR _ (PrimOpR (PrimOp name _ _))) env -> set name (refine def primitives) env) empty [primEQ, primLT, primTimes, primPlus, primMinus]
+primitives = foldr (\def@(AnnR _ (PrimOpR (PrimOp name _ _))) env -> set (string name) (refine def primitives) env) empty [primEQ, primLT, primTimes, primPlus, primMinus]
 
 ex_simple :: RawExpr
 ex_simple =
     IfR
-        (AppR
-            primLT
-            [ (AppR
-                primTimes
-                [ VarR "x"
-                , LitR (Int 2)
-                ])
-            , (AppR
-                primTimes
-                [ LitR (Int 5)
-                , LitR (Int 7)
-                ])
-            ])
+        ex_operators
         (VarR "x")
         (VarR "y")
 
@@ -42,15 +33,15 @@ ex_simple' = refine ex_simple env
 
 ex_fix :: RawExpr
 ex_fix =
-    LetR "x" (AppR (VarR "f") [VarR "x"]) (VarR "x")
+    LetR "x" (AppR Prefix (VarR "f") [VarR "x"]) (VarR "x")
 
 ex_fix' = refine ex_fix env
 
 ex_lambda :: RawExpr
 ex_lambda =
     LetR "plusTwo"
-        (AbsR ["y"] (AppR primPlus [LitR (Int 2), (VarR "y")]))
-        (AppR primTimes [AppR (VarR "plusTwo") [VarR "x"], LitR (Int 3)])
+        (AbsR ["y"] (AppR Infix primPlus [LitR (Int 2), (VarR "y")]))
+        (AppR Infix primTimes [AppR Prefix (VarR "plusTwo") [VarR "x"], LitR (Int 3)])
 
 ex_lambda' = refine ex_lambda env
 
@@ -59,19 +50,19 @@ ex_fac =
     LetR "fac"
         (AbsR ["i"]
             (IfR
-                (AppR primLT
+                (AppR Infix primLT
                     [VarR "i"
                     ,LitR (Int 1)
                     ])
                 (LitR (Int 1))
-                (AppR primTimes
+                (AppR Infix primTimes
                     [VarR "i"
-                    ,AppR (VarR "fac")
-                        [AppR primMinus
+                    ,AppR Prefix (VarR "fac")
+                        [AppR Infix primMinus
                             [VarR "i"
                             ,LitR (Int 1)
                             ]]])))
-        (AppR (VarR "fac") [LitR (Int 3)])
+        (AppR Prefix (VarR "fac") [LitR (Int 3)])
 
 ex_fac' = refine ex_fac empty
 
@@ -81,11 +72,11 @@ ex_foldr =
         (AbsR ["f", "base", "list"]
             (CaseR (VarR "list")
                 [(PCons (Cons ":" [PEscape "head", PEscape "rest"]),
-                    AppR (VarR "f") [VarR "head", (AppR (VarR "foldr") [VarR "f", VarR "base", VarR "rest"])])
+                    AppR Prefix (VarR "f") [VarR "head", (AppR Prefix (VarR "foldr") [VarR "f", VarR "base", VarR "rest"])])
                 ,(PCons (Cons "[]" []),
                     VarR "base")
                 ]))
-        (AppR (VarR "foldr") [primPlus, LitR (Int 7), EConsR ":" [LitR (Int 2), EConsR ":" [LitR (Int 3), EConsR "[]" []]]])
+        (AppR Prefix (VarR "foldr") [primPlus, LitR (Int 7), EConsR ":" [LitR (Int 2), EConsR ":" [LitR (Int 3), EConsR "[]" []]]])
 
 ex_foldr' = refine ex_foldr empty
 
@@ -113,13 +104,12 @@ ex_autoapply = refine expr env
                 (AnnR "autorun"
                     (CaseR (VarR "list")
                         [(PCons (Cons ":" [PEscape "head", PEscape "rest"]),
-                            AppR (VarR "f") [VarR "head", (AppR (VarR "foldr") [VarR "f", VarR "base", VarR "rest"])])
+                            AppR Prefix (VarR "f") [VarR "head", (AppR Prefix (VarR "foldr") [VarR "f", VarR "base", VarR "rest"])])
                         ,(PCons (Cons "[]" []),
                             VarR "base")
                         ]))))
     expr =
-        AppR
-            (VarR "foldr")
+        AppR Prefix (VarR "foldr")
             [ primPlus
             , LitR (Int 7)
             , EConsR ":"
@@ -129,3 +119,100 @@ ex_autoapply = refine expr env
                     , EConsR "[]" []
                     ]
                 ]]
+
+ex_operators :: RawExpr
+ex_operators =
+    AppR
+        Infix
+        primLT
+        [ (AppR
+            Infix
+            primTimes
+            [ VarR "x"
+            , (AppR
+                Infix
+                primPlus
+                [ LitR (Int 2)
+                , VarR "y"
+                ])
+            ])
+        , (AppR
+            Infix
+            primPlus
+            [ (AppR
+                Infix
+                primTimes
+                [ LitR (Int 2)
+                , VarR "z"
+                ])
+            , LitR (Int 7)
+            ])
+        ]
+
+ex_operators' = refine ex_operators env
+
+ex_if :: RawExpr
+ex_if =
+    IfR
+        ex_operators
+        (VarR "x")
+        (VarR "z")
+
+ex_if' = refine ex_if env
+
+ex_let :: RawExpr
+ex_let =
+    LetR "x" (LitR $ Int 3) $
+    LetR "y" (LitR $ Int 4) $
+    LetR "z" (LitR $ Int 5) $
+    AppR
+        Infix
+        primLT
+        [ (AppR
+            Infix
+            primTimes
+            [ VarR "x"
+            , (AppR
+                Infix
+                primPlus
+                [ LitR (Int 2)
+                , VarR "y"
+                ])
+            ])
+        , (AppR
+            Infix
+            primPlus
+            [ (AppR
+                Infix
+                primTimes
+                [ LitR (Int 2)
+                , VarR "z"
+                ])
+            , LitR (Int 7)
+            ])
+        ]
+
+ex_let' = refine ex_let empty
+
+ex_fac_aa :: RawExpr
+ex_fac_aa =
+    LetR "fac"
+        (AnnR "autoapply" $
+         AbsR ["i"]
+            (IfR
+                (AppR Infix primLT
+                    [VarR "i"
+                    ,LitR (Int 1)
+                    ])
+                (LitR (Int 1))
+                (AppR Infix primTimes
+                    [VarR "i"
+                    ,AppR Prefix (VarR "fac")
+                        [AppR Infix primMinus
+                            [VarR "i"
+                            ,LitR (Int 1)
+                            ]]])))
+        (AppR Prefix (VarR "fac") [LitR (Int 3)])
+
+ex_fac_aa' = refine ex_fac_aa empty
+

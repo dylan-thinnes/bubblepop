@@ -65,7 +65,11 @@ library
     Experiment.Patterns,
     Experiment.PatternsWOReplaceLet,
     Experiment.Zipper,
-    Experiment.ZipperFamilies
+    Experiment.ZipperFamilies,
+    Experiment.LambdaCalculusMapping
+    GHC.Classes
+    GHC.Expr
+    GHC.Examples
 
   -- Modules included in this library but not exported.
   -- other-modules:
@@ -78,7 +82,7 @@ library
   build-depends:
     base >=4.12 && <4.13,
     safe,
-    recursion-schemes,
+    recursion-schemes>=5.0,
     data-fix,
     megaparsec,
     text,
@@ -87,17 +91,22 @@ library
     free,
     deriving-compat,
     template-haskell,
-    prettyprinter,
+    prettyprinter==1.2.1.1,
     json,
     mtl,
     wai,
-    warp
+    warp,
+    http-types,
+    bytestring
 
   -- Directories containing source files.
   hs-source-dirs:      src
 
   -- Base language which the package is written in.
   default-language:    Haskell2010
+
+  -- Other flags
+  -- ghc-options: -Wincomplete-patterns
 
 
 executable bubblepop
@@ -111,7 +120,7 @@ executable bubblepop
   -- other-extensions:
 
   -- Other library packages from which modules are imported.
-  build-depends:       base ^>=4.12.0.0, bubblepop
+  build-depends:       base ^>=4.12.0.0, bubblepop, wai, warp, http-types
 
   -- Directories containing source files.
   -- hs-source-dirs:

@@ -21,7 +21,6 @@ module Experiment.PatternsWOReplaceLet where
 
 import qualified Data.Map as M
 import Data.Map (Map, (!?), insert, fromList, delete)
-import Data.Fix (Fix(..))
 import Data.Functor.Foldable hiding (Cons)
 import Text.Show.Deriving
 import Data.Functor.Classes

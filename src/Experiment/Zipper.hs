@@ -8,9 +8,8 @@
 module Experiment.Zipper where
 
 import Data.Void
-import Data.Fix
 import Data.Functor.Product
-import Data.Functor.Foldable
+import Data.Functor.Foldable hiding (Cons)
 import Control.Monad
 
 import Text.Show.Deriving (deriveShow1)

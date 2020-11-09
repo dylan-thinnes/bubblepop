@@ -36,7 +36,7 @@ body {
             ast2 = {"crumbtrail":5,"child":["let"," ","x"," ","="," ",{"crumbtrail":1,"child":[{"crumbtrail":0,"child":"+"}," ","5"," ","3"]},"\n","in"," ",{"crumbtrail":2,"child":"+"}," ",{"crumbtrail":3,"child":"*"}," ","x"," ","4"," ",{"crumbtrail":4,"child":"+"}," ","6"," ","x"]}
             ast3 = ["if"," ","<"," ","*"," ",{"crumbtrail":["AppArg 0","AppArg 0","IfCond"],"child":"x"}," ","2"," ",{"crumbtrail":["AppArg 1","IfCond"],"child":["*"," ","5"," ","7"]}," ","then"," ",{"crumbtrail":["IfTrue"],"child":"x"}," ","else"," ","y"]
 
-            ws = new WebSocket(`ws://${window.location.hostname}:9001`);
+            //ws = new WebSocket(`ws://${window.location.hostname}:9001`);
 
             app = Elm.Main.init({
                 flags: {
@@ -44,15 +44,15 @@ body {
                 }
             });
 
-            // Websocket
-            var ws = new WebSocket(url);
+            //// Websocket
+            //var ws = new WebSocket(url);
 
-            // Send data over a pre-initialised WebSocket connection
-            subscribe("send", function(data) {
-              if (ws != null) {
-                ws.send(JSON.stringify(data));
-              }
-            });
+            //// Send data over a pre-initialised WebSocket connection
+            //subscribe("send", function(data) {
+            //  if (ws != null) {
+            //    ws.send(JSON.stringify(data));
+            //  }
+            //});
         </script>
     </body>
 </html>
