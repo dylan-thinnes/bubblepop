@@ -1,24 +1,28 @@
-{-# LANGUAGE DeriveFunctor, DeriveFoldable, DeriveTraversable #-}
-{-# LANGUAGE NoStarIsType #-}
-{-# LANGUAGE TypeOperators #-}
-{-# LANGUAGE PatternSynonyms #-}
-{-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE DeriveFoldable    #-}
+{-# LANGUAGE DeriveFunctor     #-}
+{-# LANGUAGE DeriveTraversable #-}
+{-# LANGUAGE NoStarIsType      #-}
+{-# LANGUAGE PatternSynonyms   #-}
+{-# LANGUAGE RecordWildCards   #-}
+{-# LANGUAGE TemplateHaskell   #-}
+{-# LANGUAGE TypeFamilies      #-}
+{-# LANGUAGE TypeOperators     #-}
 module Bubble.GHC.Expr where
 
-import Bubble.GHC.Classes
-import Language.Haskell.TH
-import Language.Haskell.TH.Syntax
-import Data.Functor.Foldable
-import Data.Functor.Product
-import Data.Functor.Sum
-import Data.Functor.Const
-import Control.Monad (join, guard)
-import Control.Monad.State hiding (lift)
-import Data.Word
+import           Bubble.GHC.Classes
+import           Bubble.GHC.Utils
 
-import Text.Show.Deriving
+import           Control.Monad              (guard, join)
+import           Control.Monad.State        hiding (lift)
+import           Data.Functor.Const
+import           Data.Functor.Foldable
+import           Data.Functor.Product
+import           Data.Functor.Sum
+import           Data.Word
+import           Language.Haskell.TH
+import           Language.Haskell.TH.Syntax
+
+import           Text.Show.Deriving
 
 -- Redices
 newtype Redex a = R { unR :: Maybe a }
@@ -34,12 +38,15 @@ deriveShow1 ''Redex
 
 -- Primitive operations
 data PrimOp = PrimOp
-    { primOpName :: Name
+    { primOpName     :: Name
     , primOpContract :: [LitContractType]
-    , primOpFunc :: [Lit] -> Lit
+    , primOpFunc     :: [Lit] -> Lit
     }
 
-data LitContractType = Char | String | Integer | Rational
+data LitContractType = Char
+    | String
+    | Integer
+    | Rational
 
 matchLitContract :: Functor f => LitContractType -> ExpG f -> Maybe Lit
 matchLitContract contract expr =
@@ -123,12 +130,6 @@ matchPat (ConP name1 argPats) expr =
 matchPat WildP _ = Just []
 matchPat _ _ = Nothing -- error "Can't match _ against _"
 
-patNames :: Pat -> [Name]
-patNames = cata f
-    where
-        f (VarPF name) = [name]
-        f pat = foldMap id pat
-
 replace :: (Name, ExpG Redex) -> ExpG Redex -> ExpG Redex
 replace (name, value) body = para f body
     where
@@ -137,17 +138,30 @@ replace (name, value) body = para f body
                then value
                else embed $ fmap fst e
         f e@(FEF _ _ (LamEF pats body)) =
-            if name `elem` foldMap patNames pats
-               then embed $ fmap fst e
-               else embed $ fmap snd e
+            undefined
+            --if name `elem` foldMap definesNames pats
+            --   then embed $ fmap fst e
+            --   else embed $ fmap snd e
         -- TODO: handle let & case statement
         f e = embed $ fmap snd e
 
-occName :: Name -> OccName
-occName (Name o _) = o
+class DefinesNames a where
+    definesNames :: a -> Maybe [Name]
 
-nameFlavour :: Name -> NameFlavour
-nameFlavour (Name _ f) = f
+instance DefinesNames (ExpF a) where
+    definesNames (LamEF pats _)  = undefined --Just $ foldMap definesNames pats
+    definesNames (LetEF decls _) = undefined --Just $ foldMap (definesNames . project) decls
+    definesNames _               = Nothing
+
+instance DefinesNames Pat where
+    definesNames = undefined --cata f
+        where
+            f (VarPF name) = [name]
+            f pat          = foldMap id pat
+
+instance DefinesNames (DecF a) where
+    definesNames (FunDF name _) = Just [name]
+    definesNames (FunDF name _) = Just [name]
 
 define :: (Name, ExpG Redex) -> ExpG Redex -> ExpG Redex
 define (name, value) body = para f body
@@ -157,9 +171,10 @@ define (name, value) body = para f body
                then FE id (Redex value) (VarEF n)
                else embed $ fmap fst e
         f e@(FEF _ _ (LamEF pats body)) =
-            if occName name `elem` map occName (foldMap patNames pats)
-               then embed $ fmap fst e
-               else embed $ fmap snd e
+            undefined
+            --if occName name `elem` map occName (foldMap definesNames pats)
+            --   then embed $ fmap fst e
+            --   else embed $ fmap snd e
         -- TODO: handle let & case statement
         f e = embed $ fmap snd e
 
@@ -220,6 +235,8 @@ hatch expr =
                             Just $ FE (-1) NoRedex $ LitEF $ primOpFunc lits
                         _ -> NoRedex
                 _ -> NoRedex
+        FE _ _ (LetEF decls expression) ->
+            undefined
         _ -> NoRedex
 
 eat :: Int -> ExpG Redex -> ExpG Redex

@@ -2,20 +2,20 @@
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE DeriveLift #-}
-{-# LANGUAGE PackageImports #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
 
 module Bubble.GHC.Classes where
 
-import "template-haskell" Language.Haskell.TH
-import "template-haskell" Language.Haskell.TH.Syntax
+import Language.Haskell.TH
+import Language.Haskell.TH.Syntax
 import Data.Functor.Foldable.TH
 import Text.Show.Deriving
 
 makeBaseFunctor ''Exp
 makeBaseFunctor ''Pat
+makeBaseFunctor ''Dec
 
 deriving instance Lift AnnTarget
 deriving instance Lift RuleBndr
@@ -67,6 +67,3 @@ deriveShow1 ''ExpF
 
 liftEx :: Q Exp -> Q Exp
 liftEx = (>>= lift)
-
-errorEx :: Exp
-errorEx = $([| error |] >>= lift)
