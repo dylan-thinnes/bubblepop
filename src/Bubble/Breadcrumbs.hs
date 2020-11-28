@@ -10,6 +10,7 @@ import Data.Functor.Compose
 import Control.Comonad.Cofree (Cofree(..))
 import qualified Control.Comonad.Trans.Cofree
 import Text.Show.Deriving (deriveShow1)
+import Data.Fix (Fix(..))
 
 {------------------------------------------------------------------------------
                                   BREADCRUMBS

@@ -17,6 +17,7 @@ import qualified Data.Bifunctor.Fix as Bi
 import Data.Bifunctor.TH
 import Data.Functor.Foldable hiding (Cons)
 import Text.Show.Deriving
+import Data.Fix (Fix(..))
 import Data.Functor.Classes
 
 data PrimOp = PrimOp String ([Expr] -> Either String Expr)

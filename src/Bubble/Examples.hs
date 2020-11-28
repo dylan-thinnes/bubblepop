@@ -5,6 +5,7 @@ import Bubble.Expr
 
 import Data.Functor.Foldable hiding (Cons)
 import Data.Functor.Product
+import Data.Fix (Fix(..))
 
 -- Example
 env :: Env
@@ -215,4 +216,3 @@ ex_fac_aa =
         (AppR Prefix (VarR "fac") [LitR (Int 3)])
 
 ex_fac_aa' = refine ex_fac_aa empty
-

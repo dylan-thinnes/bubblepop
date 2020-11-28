@@ -29,6 +29,7 @@ import qualified Data.List.NonEmpty as N
 import Data.List.NonEmpty (NonEmpty(..), (<|))
 import Data.Functor ((<&>))
 import Debug.Trace
+import Data.Fix (Fix(..))
 
 data PrimOp = PrimOp
     { primOpName :: String

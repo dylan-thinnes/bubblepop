@@ -11,6 +11,7 @@ import Data.Void
 import Data.Functor.Product
 import Data.Functor.Foldable hiding (Cons)
 import Control.Monad
+import Data.Fix (Fix(..))
 
 import Text.Show.Deriving (deriveShow1)
 

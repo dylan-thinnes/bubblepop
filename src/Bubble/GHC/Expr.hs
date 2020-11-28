@@ -21,6 +21,7 @@ import           Data.Functor.Sum
 import           Data.Word
 import           Language.Haskell.TH
 import           Language.Haskell.TH.Syntax
+import           Data.Fix (Fix(..))
 
 import           Text.Show.Deriving
 

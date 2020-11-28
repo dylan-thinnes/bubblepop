@@ -16,6 +16,7 @@ import Control.Monad.State
 import Data.Maybe (isJust)
 import Control.Comonad.Cofree
 import Data.Functor.Const
+import Data.Fix (Fix(..))
 
 {------------------------------------------------------------------------------
                              IO & USER INTERACTION

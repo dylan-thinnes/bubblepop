@@ -27,6 +27,7 @@ import Control.Monad (join, guard)
 import Control.Monad.Free
 import qualified Data.List.NonEmpty as N
 import Data.List.NonEmpty (NonEmpty(..), (<|))
+import Data.Fix (Fix(..))
 import Data.Functor ((<&>))
 
 data PrimOp = PrimOp

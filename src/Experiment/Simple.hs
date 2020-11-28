@@ -13,6 +13,7 @@ import Text.Show.Deriving
 import qualified Data.Map as M
 import Data.Map (Map, (!?), insert, empty, fromList)
 import Data.Functor.Foldable hiding (Cons)
+import Data.Fix (Fix(..))
 
 data ExprF b a
     = LitF Literal

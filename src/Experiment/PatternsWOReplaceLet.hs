@@ -35,6 +35,7 @@ import Debug.Trace
 import Control.Applicative ((<|>))
 import GHC.Exts
 import Data.Foldable
+import Data.Fix (Fix(..))
 import Data.Maybe (mapMaybe)
 
 data PrimOp = PrimOp
@@ -254,7 +255,7 @@ replace (name, replacement) = para f
                 | name `elem` names -> embed unchanged
                 | otherwise         -> embed changed
               Pair (CaseF scrutee branches) hatch
-                -> CaseG (snd <$> hatch) (snd scrutee) 
+                -> CaseG (snd <$> hatch) (snd scrutee)
                     $ branches <&> \(pat, body)
                                     -> ( pat
                                        , if name `elem` patternNames pat

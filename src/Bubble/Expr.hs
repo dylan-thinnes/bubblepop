@@ -34,6 +34,7 @@ import qualified Data.Foldable
 import Control.Applicative
 import Data.Char (isUpper)
 import Data.Functor.Compose
+import Data.Fix (Fix(..))
 
 {------------------------------------------------------------------------------
                                 RAW EXPRESSIONS
@@ -243,7 +244,7 @@ replace (name, replacement) = para f
                 | name `elem` map string names -> unchanged
                 | otherwise                    -> changed
               Pair (CaseF scrutee branches) hatch
-                -> CaseG (snd <$> hatch) (snd scrutee) 
+                -> CaseG (snd <$> hatch) (snd scrutee)
                     $ branches <&> \(pat, body)
                                     -> ( pat
                                        , if name `elem` patternNames pat

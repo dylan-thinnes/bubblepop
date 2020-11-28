@@ -31,6 +31,7 @@ import Data.List.NonEmpty (NonEmpty(..), (<|))
 import Data.Functor ((<&>))
 import GHC.Exts (IsString(..))
 import qualified Data.Foldable
+import Data.Fix (Fix(..))
 import Data.Char (isUpper)
 
 {------------------------------------------------------------------------------
@@ -226,7 +227,7 @@ replace (name, replacement) = para f
                 | name `elem` names -> unchanged
                 | otherwise         -> changed
               Pair (CaseF scrutee branches) hatch
-                -> CaseG (snd <$> hatch) (snd scrutee) 
+                -> CaseG (snd <$> hatch) (snd scrutee)
                     $ branches <&> \(pat, body)
                                     -> ( pat
                                        , if name `elem` patternNames pat

@@ -21,6 +21,7 @@ import Data.Functor.Sum
 import Data.Functor.Foldable hiding (Cons)
 import Control.Monad
 import Data.Map (Map, lookup, insert, delete)
+import Data.Fix (Fix(..))
 
 import Text.Show.Deriving (deriveShow1)
 
