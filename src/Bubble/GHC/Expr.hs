@@ -3,8 +3,10 @@
 {-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE NoStarIsType      #-}
 {-# LANGUAGE PatternSynonyms   #-}
+{-# LANGUAGE PackageImports   #-}
 {-# LANGUAGE RecordWildCards   #-}
 {-# LANGUAGE TemplateHaskell   #-}
+{-# LANGUAGE TupleSections     #-}
 {-# LANGUAGE TypeFamilies      #-}
 {-# LANGUAGE TypeOperators     #-}
 module Bubble.GHC.Expr where
@@ -19,11 +21,14 @@ import           Data.Functor.Foldable
 import           Data.Functor.Product
 import           Data.Functor.Sum
 import           Data.Word
-import           Language.Haskell.TH
-import           Language.Haskell.TH.Syntax
+import           Data.Maybe                 (catMaybes)
+import           "template-haskell" Language.Haskell.TH
+import           "template-haskell" Language.Haskell.TH.Syntax
 import           Data.Fix (Fix(..))
 
 import           Text.Show.Deriving
+
+import           Debug.Trace
 
 -- Redices
 newtype Redex a = R { unR :: Maybe a }
@@ -44,10 +49,7 @@ data PrimOp = PrimOp
     , primOpFunc     :: [Lit] -> Lit
     }
 
-data LitContractType = Char
-    | String
-    | Integer
-    | Rational
+data LitContractType = Char | String | Integer | Rational
 
 matchLitContract :: Functor f => LitContractType -> ExpG f -> Maybe Lit
 matchLitContract contract expr =
@@ -109,7 +111,7 @@ condemn = cata
                         (VarE (Name (OccName "error") (NameG VarName (PkgName "base") (ModName "GHC.Err"))))
                         (LitE $ StringL exception)
 
-matchPat :: Pat -> ExpG f -> Maybe [(Name, ExpG f)]
+matchPat :: Pat -> ExpG Redex -> Maybe [(Name, ExpG Redex)]
 matchPat (LitP lit1) (FE _ _ (LitEF lit2)) = do
     guard (lit1 == lit2)
     Just []
@@ -128,59 +130,96 @@ matchPat (ConP name1 argPats) expr =
           funcMatch <- matchPat (ConP name1 $ init argPats) func
           lastArgMatch <- matchPat (last argPats) arg
           Just $ funcMatch ++ lastArgMatch
+      FE _ _ (LitEF (StringL (c:cs))) -> do
+          guard $ occName name1 == OccName ":"
+          fmap concat $ sequence $ zipWith matchPat argPats [FE (-1) NoRedex $ LitEF $ CharL c, FE (-1) NoRedex $ LitEF $ StringL cs]
+      FE _ _ (ListEF l) -> do
+          case l of
+            [] -> do
+              guard $ occName name1 == OccName "[]"
+              Just []
+            head : tail -> do
+              guard $ occName name1 == OccName ":"
+              fmap concat $ sequence $ zipWith matchPat argPats [head, FE (-1) NoRedex $ ListEF tail]
+matchPat (ListP pats) expr =
+    case expr of
+      --FE _ _ (InfixEF (Just larg) (FE _ _ (VarEF name)) (Just rarg)) -> do
+      --    case pats of
+      --      [] -> Nothing
+      --      headPat : tailPat -> do
+      --        guard $ occName name == OccName ":"
+      --        lMatch <- matchPat headPat larg
+      --        rMatch <- matchPat tailPat rarg
+      --        Just $ lMatch ++ rMatch
+      FE _ _ (LitEF (StringL cs)) -> do
+          guard $ length cs == length pats
+          fmap concat $ sequence $ zipWith matchPat pats (map (FE (-1) NoRedex . LitEF . CharL) cs)
+      FE _ _ (ListEF exps) -> do
+          guard $ length pats == 0
+          fmap concat $ sequence $ zipWith matchPat pats exps
+matchPat (InfixP lpat name1 rpat) expr =
+    case expr of
+      FE _ _ (ConEF name2) -> do
+          guard (name1 == name2)
+          Just []
+      FE _ _ (InfixEF (Just larg) (FE _ _ (VarEF name2)) (Just rarg)) -> do
+          guard (name1 == name2)
+          lMatch <- matchPat lpat larg
+          rMatch <- matchPat rpat rarg
+          Just $ lMatch ++ rMatch
+      FE _ _ (LitEF (StringL (c:cs))) -> do
+          guard $ occName name1 == OccName ":"
+          fmap concat $ sequence $ zipWith matchPat [lpat, rpat] [FE (-1) NoRedex $ LitEF $ CharL c, FE (-1) NoRedex $ LitEF $ StringL cs]
+      FE _ _ (ListEF l) -> do
+          case l of
+            [] -> do
+              guard $ occName name1 == OccName "[]"
+              Just []
+            head : tail -> do
+              guard $ occName name1 == OccName ":"
+              fmap concat $ sequence $ zipWith matchPat [lpat, rpat] [head, FE (-1) NoRedex $ ListEF tail]
 matchPat WildP _ = Just []
 matchPat _ _ = Nothing -- error "Can't match _ against _"
+
+patNames :: Pat -> [Name]
+patNames (LitP lit1) = []
+patNames (VarP name) = [name]
+patNames (TupP pats) = concatMap patNames pats
+patNames (ConP name1 argPats) = name1 : concatMap patNames argPats
+patNames WildP = []
+patNames _ = [] -- error "Can't match _ against _"
 
 replace :: (Name, ExpG Redex) -> ExpG Redex -> ExpG Redex
 replace (name, value) body = para f body
     where
         f e@(FEF _ _ (VarEF n)) =
-            if name == n
+            if occName name == occName n
                then value
                else embed $ fmap fst e
         f e@(FEF _ _ (LamEF pats body)) =
-            undefined
-            --if name `elem` foldMap definesNames pats
-            --   then embed $ fmap fst e
-            --   else embed $ fmap snd e
+            let names = concatMap patNames pats
+            in
+            if name `elem` names
+               then embed $ fmap fst e
+               else embed $ fmap snd e
         -- TODO: handle let & case statement
         f e = embed $ fmap snd e
-
-class DefinesNames a where
-    definesNames :: a -> Maybe [Name]
-
-instance DefinesNames (ExpF a) where
-    definesNames (LamEF pats _)  = undefined --Just $ foldMap definesNames pats
-    definesNames (LetEF decls _) = undefined --Just $ foldMap (definesNames . project) decls
-    definesNames _               = Nothing
-
-instance DefinesNames Pat where
-    definesNames = undefined --cata f
-        where
-            f (VarPF name) = [name]
-            f pat          = foldMap id pat
-
-instance DefinesNames (DecF a) where
-    definesNames (FunDF name _) = Just [name]
-    definesNames (FunDF name _) = Just [name]
 
 define :: (Name, ExpG Redex) -> ExpG Redex -> ExpG Redex
 define (name, value) body = para f body
     where
         f e@(FEF id redex (VarEF n)) =
             if occName name == occName n
-               then FE id (Redex value) (VarEF n)
-               else embed $ fmap fst e
+                then FE id (Redex value) (VarEF n)
+                else embed $ fmap fst e
         f e@(FEF _ _ (LamEF pats body)) =
-            undefined
-            --if occName name `elem` map occName (foldMap definesNames pats)
-            --   then embed $ fmap fst e
-            --   else embed $ fmap snd e
+            let names = concatMap patNames pats
+            in
+            if occName name `elem` map occName names
+                then embed $ fmap fst e
+                else embed $ fmap snd e
         -- TODO: handle let & case statement
         f e = embed $ fmap snd e
-
---rerefine :: ExpG Redex -> ExpG Redex
---rerefine = cata ()
 
 hatchAll :: ExpG Redex -> ExpG Redex
 hatchAll = cata f
@@ -206,13 +245,13 @@ hatch expr =
         FE _ _ (AppEF func arg) ->
             case func of
                 FE i _ (LamEF (pat:pats) body) -> R $ do
-                    nameExpPairs <- matchPat pat func
+                    nameExpPairs <- matchPat pat arg
                     let newBody = foldr replace body nameExpPairs
                     Just $ if length pats == 0
                            then newBody
                            else FE i NoRedex (LamEF pats newBody)
                 FP i _ (PrimOp {..}) -> R $ do
-                    --lits <- sequence $ zipWith matchLitContract primOpContract undefined
+                    lits <- sequence $ zipWith matchLitContract primOpContract [arg]
                     undefined
                     --nameExpPairs <- matchPat pat func
                     --let newBody = foldr replace body nameExpPairs
@@ -238,6 +277,20 @@ hatch expr =
                 _ -> NoRedex
         FE _ _ (LetEF decls expression) ->
             undefined
+        FE _ _ (CaseEF expr branches) ->
+            -- TODO: Handle declarations
+            let matchBranch branch@(Match pat body declarations) = (branch,) <$> matchPat pat expr
+                matches = catMaybes $ map matchBranch branches
+            in
+            case matches of
+              [] -> NoRedex
+              (branch@(Match pat body declarations), nameExpPairs):_ ->
+                case body of
+                  GuardedB _ -> error "Guarded case statements not supported"
+                  NormalB exp ->
+                    let newBody = foldr replace (commend exp) nameExpPairs -- TODO: thread GExp inside branches
+                    in
+                    Redex newBody
         _ -> NoRedex
 
 eat :: Int -> ExpG Redex -> ExpG Redex
@@ -245,9 +298,8 @@ eat target = cata f
     where
         f x@(FAF id redex _) =
             case redex of
-              Redex out
-                | id == target -> out
-              _ -> embed x
+              Redex out | id == target -> out
+              _                        -> embed x
 
 collect :: ExpG Redex -> [Int]
 collect = cata f

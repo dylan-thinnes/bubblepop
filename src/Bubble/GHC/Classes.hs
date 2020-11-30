@@ -2,14 +2,15 @@
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE DeriveLift #-}
+{-# LANGUAGE PackageImports #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
 
 module Bubble.GHC.Classes where
 
-import Language.Haskell.TH
-import Language.Haskell.TH.Syntax
+import "template-haskell" Language.Haskell.TH
+import "template-haskell" Language.Haskell.TH.Syntax
 import Data.Functor.Foldable.TH
 import Text.Show.Deriving
 

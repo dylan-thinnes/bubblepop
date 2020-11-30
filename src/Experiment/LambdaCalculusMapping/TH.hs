@@ -1,7 +1,8 @@
+{-# LANGUAGE PackageImports  #-}
 module Experiment.LambdaCalculusMapping.TH where
 
-import Language.Haskell.TH
-import Language.Haskell.TH.Syntax
+import "template-haskell" Language.Haskell.TH
+import "template-haskell" Language.Haskell.TH.Syntax
 
 atoz = pure <$> ['a'..'z']
 oneOrTwo = atoz ++ ((++) <$> atoz <*> atoz)

@@ -16,10 +16,10 @@ category:            Education
 extra-source-files:  CHANGELOG.md
 
 library
-  exposed-modules:     Bubble.Expr, Bubble.Examples, Bubble.Optimizations, Bubble.Parser, Bubble.Breadcrumbs, Bubble.IO, Bubble.Lift, Bubble.GHC.Expr, Bubble.GHC.Examples, Bubble.GHC.Utils, Bubble.GHC.Classes, Experiment.Cooperate, Experiment.Data, Experiment.Fix2, Experiment.Hatches, Experiment.Utils, Experiment.Carrier, Experiment.Simple, Experiment.PatternsWOReplaceLet, Experiment.Flat, Experiment.Zipper, Experiment.Parser, Experiment.CarrierRefuse, Experiment.Patterns, Experiment.ZipperFamilies, Experiment.LambdaCalculusMapping, Experiment.LambdaCalculusMapping.TH
+  exposed-modules:     Bubble.Expr, Bubble.Examples, Bubble.Optimizations, Bubble.Parser, Bubble.Breadcrumbs, Bubble.IO, Bubble.Lift, Bubble.GHC.Expr, Bubble.GHC.Examples, Bubble.GHC.Utils, Bubble.GHC.Classes, Bubble.GHC.Ppr, Bubble.GHC.PprLib, Experiment.Cooperate, Experiment.Data, Experiment.Fix2, Experiment.Hatches, Experiment.Utils, Experiment.Carrier, Experiment.Simple, Experiment.PatternsWOReplaceLet, Experiment.Flat, Experiment.Zipper, Experiment.Parser, Experiment.CarrierRefuse, Experiment.Patterns, Experiment.ZipperFamilies, Experiment.LambdaCalculusMapping, Experiment.LambdaCalculusMapping.TH
   -- other-modules:
   other-extensions:    DeriveFoldable, DeriveFunctor, DeriveTraversable, FlexibleInstances, GeneralizedNewtypeDeriving, LambdaCase, MultiWayIf, OverloadedStrings, PatternSynonyms, RankNTypes, RecordWildCards, ScopedTypeVariables, StandaloneDeriving, TemplateHaskell, TypeFamilies, TypeOperators, UndecidableInstances, ViewPatterns, TypeApplications, DeriveLift, PackageImports, NoStarIsType, ConstraintKinds, DataKinds, ExistentialQuantification, FlexibleContexts, GADTs, NamedFieldPuns, PolyKinds, QuantifiedConstraints, KindSignatures, EmptyDataDeriving, TupleSections, MultiParamTypeClasses, FunctionalDependencies, InstanceSigs
-  build-depends:       base ^>=4.13.0.0, containers ^>=0.6.2.1, text ^>=1.2.4.0, mtl ^>=2.2.2, template-haskell ^>=2.15.0.0, safe, recursion-schemes, deriving-compat, data-fix, free, bytestring, json, prettyprinter, bifunctors, megaparsec
+  build-depends:       base ^>=4.13.0.0, containers ^>=0.6.2.1, text ^>=1.2.4.0, mtl ^>=2.2.2, template-haskell ^>=2.15.0.0, safe, recursion-schemes, deriving-compat, data-fix, free, bytestring, json, prettyprinter, pretty, bifunctors, megaparsec, ghc-boot-th, ghc-lib-parser
   hs-source-dirs:      src
   default-language:    Haskell2010
 

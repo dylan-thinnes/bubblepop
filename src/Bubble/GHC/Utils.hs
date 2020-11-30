@@ -1,8 +1,9 @@
+{-# LANGUAGE PackageImports #-}
 {-# LANGUAGE TemplateHaskell #-}
 module Bubble.GHC.Utils where
 
 import Bubble.GHC.Classes
-import Language.Haskell.TH.Syntax
+import "template-haskell" Language.Haskell.TH.Syntax
 
 occName :: Name -> OccName
 occName (Name o _) = o
